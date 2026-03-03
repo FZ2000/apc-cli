@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from apc.marketplace import (
+from marketplace import (
     DEFAULT_MARKETPLACES,
     _build_skill_url,
     add_marketplace,
@@ -41,7 +41,7 @@ class TestMarketplaceConfig(unittest.TestCase):
         self.tmpdir = tempfile.mkdtemp()
         self.config_dir = Path(self.tmpdir)
         self.patcher = patch(
-            "apc.marketplace.get_config_dir",
+            "marketplace.get_config_dir",
             return_value=self.config_dir,
         )
         self.patcher.start()
@@ -141,7 +141,7 @@ class TestLocalDirectory(unittest.TestCase):
             self.assertIsNotNone(result)
             self.assertEqual(result["source_tool"], "local")
 
-    @patch("apc.marketplace.fetch_skill_from_repo")
+    @patch("marketplace.fetch_skill_from_repo")
     def test_search_falls_through_local_to_repo(self, mock_fetch):
         """If local directory doesn't have the skill, fall through to GitHub repo."""
         mock_fetch.return_value = {"name": "pdf", "source_repo": "a/skills"}
@@ -173,7 +173,7 @@ class TestUrlBuilding(unittest.TestCase):
 class TestFetchSkill(unittest.TestCase):
     """Tests for fetching and parsing SKILL.md from GitHub."""
 
-    @patch("apc.marketplace.httpx.get")
+    @patch("marketplace.httpx.get")
     def test_fetch_success(self, mock_get):
         mock_resp = MagicMock()
         mock_resp.status_code = 200
@@ -199,7 +199,7 @@ class TestFetchSkill(unittest.TestCase):
             timeout=15,
         )
 
-    @patch("apc.marketplace.httpx.get")
+    @patch("marketplace.httpx.get")
     def test_fetch_not_found(self, mock_get):
         mock_resp = MagicMock()
         mock_resp.status_code = 404
@@ -208,7 +208,7 @@ class TestFetchSkill(unittest.TestCase):
         skill = fetch_skill_from_repo("anthropics/skills", "nonexistent")
         self.assertIsNone(skill)
 
-    @patch("apc.marketplace.httpx.get")
+    @patch("marketplace.httpx.get")
     def test_fetch_network_error(self, mock_get):
         import httpx
 
@@ -217,7 +217,7 @@ class TestFetchSkill(unittest.TestCase):
         skill = fetch_skill_from_repo("anthropics/skills", "pdf")
         self.assertIsNone(skill)
 
-    @patch("apc.marketplace.httpx.get")
+    @patch("marketplace.httpx.get")
     def test_fetch_no_frontmatter(self, mock_get):
         mock_resp = MagicMock()
         mock_resp.status_code = 200
@@ -233,7 +233,7 @@ class TestFetchSkill(unittest.TestCase):
 class TestSearchSkill(unittest.TestCase):
     """Tests for searching across multiple marketplaces."""
 
-    @patch("apc.marketplace.fetch_skill_from_repo")
+    @patch("marketplace.fetch_skill_from_repo")
     def test_search_returns_first_match(self, mock_fetch):
         skill_a = {"name": "pdf", "source_repo": "a/skills"}
         skill_b = {"name": "pdf", "source_repo": "b/skills"}
@@ -244,7 +244,7 @@ class TestSearchSkill(unittest.TestCase):
         # Should only call once since first repo matched
         mock_fetch.assert_called_once_with("a/skills", "pdf", "main")
 
-    @patch("apc.marketplace.fetch_skill_from_repo")
+    @patch("marketplace.fetch_skill_from_repo")
     def test_search_falls_through_to_second_repo(self, mock_fetch):
         mock_fetch.side_effect = [None, {"name": "pdf", "source_repo": "b/skills"}]
 
@@ -252,22 +252,22 @@ class TestSearchSkill(unittest.TestCase):
         self.assertEqual(result["source_repo"], "b/skills")
         self.assertEqual(mock_fetch.call_count, 2)
 
-    @patch("apc.marketplace.fetch_skill_from_repo")
+    @patch("marketplace.fetch_skill_from_repo")
     def test_search_returns_none_when_not_found(self, mock_fetch):
         mock_fetch.return_value = None
 
         result = search_skill("pdf", repos=["a/skills"])
         self.assertIsNone(result)
 
-    @patch("apc.marketplace.fetch_skill_from_repo")
+    @patch("marketplace.fetch_skill_from_repo")
     def test_search_uses_custom_branch(self, mock_fetch):
         mock_fetch.return_value = {"name": "pdf", "source_repo": "a/skills"}
 
         search_skill("pdf", repos=["a/skills"], branch="develop")
         mock_fetch.assert_called_once_with("a/skills", "pdf", "develop")
 
-    @patch("apc.marketplace.load_marketplaces", return_value=["anthropics/skills"])
-    @patch("apc.marketplace.fetch_skill_from_repo")
+    @patch("marketplace.load_marketplaces", return_value=["anthropics/skills"])
+    @patch("marketplace.fetch_skill_from_repo")
     def test_search_uses_default_marketplaces(self, mock_fetch, mock_load):
         mock_fetch.return_value = {"name": "pdf", "source_repo": "anthropics/skills"}
 
@@ -283,7 +283,7 @@ class TestSkillStorage(unittest.TestCase):
         self.tmpdir = tempfile.mkdtemp()
         self.config_dir = Path(self.tmpdir)
         self.patcher = patch(
-            "apc.marketplace.get_config_dir",
+            "marketplace.get_config_dir",
             return_value=self.config_dir,
         )
         self.patcher.start()
@@ -328,13 +328,13 @@ class TestLinkSkills(unittest.TestCase):
         self.cursor_rules.mkdir()
 
     def _manifest(self, tool="claude"):
-        from apc.appliers.manifest import ToolManifest
+        from appliers.manifest import ToolManifest
 
         return ToolManifest(tool, path=Path(self.tmpdir) / f"{tool}_manifest.json")
 
     def test_claude_link_skills_directory_symlink(self):
         """Claude creates directory symlinks: ~/.claude/skills/pdf -> source/pdf"""
-        from apc.appliers.claude import ClaudeApplier
+        from appliers.claude import ClaudeApplier
 
         applier = ClaudeApplier()
         applier.SKILL_DIR = self.claude_skills
@@ -352,7 +352,7 @@ class TestLinkSkills(unittest.TestCase):
 
     def test_cursor_link_skills_file_symlink(self):
         """Cursor creates file symlinks: .cursor/rules/pdf.mdc -> source/pdf/SKILL.md"""
-        from apc.appliers.cursor import CursorApplier
+        from appliers.cursor import CursorApplier
 
         applier = CursorApplier()
         applier.SKILL_DIR = self.cursor_rules
@@ -371,7 +371,7 @@ class TestLinkSkills(unittest.TestCase):
         existing_dir.mkdir()
         (existing_dir / "old.md").write_text("old")
 
-        from apc.appliers.claude import ClaudeApplier
+        from appliers.claude import ClaudeApplier
 
         applier = ClaudeApplier()
         applier.SKILL_DIR = self.claude_skills
@@ -386,7 +386,7 @@ class TestLinkSkills(unittest.TestCase):
         broken_link = self.claude_skills / "pdf"
         os.symlink("/nonexistent/path", broken_link)
 
-        from apc.appliers.claude import ClaudeApplier
+        from appliers.claude import ClaudeApplier
 
         applier = ClaudeApplier()
         applier.SKILL_DIR = self.claude_skills
@@ -398,7 +398,7 @@ class TestLinkSkills(unittest.TestCase):
         self.assertEqual(broken_link.resolve(), (self.source_dir / "pdf").resolve())
 
     def test_link_skills_skips_missing_source(self):
-        from apc.appliers.claude import ClaudeApplier
+        from appliers.claude import ClaudeApplier
 
         applier = ClaudeApplier()
         applier.SKILL_DIR = self.claude_skills
@@ -409,7 +409,7 @@ class TestLinkSkills(unittest.TestCase):
 
     def test_link_skills_returns_zero_when_no_skill_dir(self):
         """Appliers without SKILL_DIR (e.g. Gemini) should return 0."""
-        from apc.appliers.gemini import GeminiApplier
+        from appliers.gemini import GeminiApplier
 
         applier = GeminiApplier()
         skills = [{"name": "pdf", "targets": []}]
@@ -422,7 +422,7 @@ class TestLinkSkills(unittest.TestCase):
         existing = self.cursor_rules / "pdf.mdc"
         existing.write_text("old content")
 
-        from apc.appliers.cursor import CursorApplier
+        from appliers.cursor import CursorApplier
 
         applier = CursorApplier()
         applier.SKILL_DIR = self.cursor_rules

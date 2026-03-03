@@ -6,8 +6,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from apc.appliers.manifest import ToolManifest
-from apc.appliers.memory_section import BEGIN_MARKER, END_MARKER
+from appliers.manifest import ToolManifest
+from appliers.memory_section import BEGIN_MARKER, END_MARKER
 
 
 class TestClaudeApplier(unittest.TestCase):
@@ -38,8 +38,8 @@ class TestClaudeApplier(unittest.TestCase):
         ]
         manifest = self._manifest()
 
-        with patch("apc.appliers.claude.CLAUDE_COMMANDS_DIR", self.commands_dir):
-            from apc.appliers.claude import ClaudeApplier
+        with patch("appliers.claude.CLAUDE_COMMANDS_DIR", self.commands_dir):
+            from appliers.claude import ClaudeApplier
 
             applier = ClaudeApplier()
             count = applier.apply_skills(skills, manifest)
@@ -66,8 +66,8 @@ class TestClaudeApplier(unittest.TestCase):
         secrets = {"TOKEN": "actual_value"}
         manifest = self._manifest()
 
-        with patch("apc.appliers.claude.CLAUDE_JSON", self.claude_json):
-            from apc.appliers.claude import ClaudeApplier
+        with patch("appliers.claude.CLAUDE_JSON", self.claude_json):
+            from appliers.claude import ClaudeApplier
 
             applier = ClaudeApplier()
             count = applier.apply_mcp_servers(servers, secrets, manifest)
@@ -96,8 +96,8 @@ class TestClaudeApplier(unittest.TestCase):
         ]
         manifest = self._manifest()
 
-        with patch("apc.appliers.claude.CLAUDE_JSON", self.claude_json):
-            from apc.appliers.claude import ClaudeApplier
+        with patch("appliers.claude.CLAUDE_JSON", self.claude_json):
+            from appliers.claude import ClaudeApplier
 
             applier = ClaudeApplier()
             count = applier.apply_mcp_servers(servers, {}, manifest)
@@ -117,10 +117,10 @@ class TestClaudeApplier(unittest.TestCase):
         manifest = self._manifest()
 
         with (
-            patch("apc.appliers.claude.CLAUDE_MD", self.claude_md),
-            patch("apc.appliers.claude.CLAUDE_DIR", self.claude_dir),
+            patch("appliers.claude.CLAUDE_MD", self.claude_md),
+            patch("appliers.claude.CLAUDE_DIR", self.claude_dir),
         ):
-            from apc.appliers.claude import ClaudeApplier
+            from appliers.claude import ClaudeApplier
 
             applier = ClaudeApplier()
             count = applier.apply_memory(entries, manifest)
@@ -145,10 +145,10 @@ class TestClaudeApplier(unittest.TestCase):
         manifest = self._manifest()
 
         with (
-            patch("apc.appliers.claude.CLAUDE_MD", self.claude_md),
-            patch("apc.appliers.claude.CLAUDE_DIR", self.claude_dir),
+            patch("appliers.claude.CLAUDE_MD", self.claude_md),
+            patch("appliers.claude.CLAUDE_DIR", self.claude_dir),
         ):
-            from apc.appliers.claude import ClaudeApplier
+            from appliers.claude import ClaudeApplier
 
             applier = ClaudeApplier()
             applier.apply_memory(entries, manifest)
@@ -185,11 +185,11 @@ class TestClaudeApplier(unittest.TestCase):
         )
 
         with (
-            patch("apc.appliers.claude.CLAUDE_MD", self.claude_md),
-            patch("apc.appliers.claude.CLAUDE_DIR", self.claude_dir),
-            patch("apc.llm_client.call_llm", return_value=llm_response),
+            patch("appliers.claude.CLAUDE_MD", self.claude_md),
+            patch("appliers.claude.CLAUDE_DIR", self.claude_dir),
+            patch("llm_client.call_llm", return_value=llm_response),
         ):
-            from apc.appliers.claude import ClaudeApplier
+            from appliers.claude import ClaudeApplier
 
             applier = ClaudeApplier()
             count = applier.apply_memory_via_llm(collected, manifest)
@@ -206,10 +206,10 @@ class TestClaudeApplier(unittest.TestCase):
         manifest = self._manifest()
 
         with (
-            patch("apc.appliers.claude.CLAUDE_MD", self.claude_md),
-            patch("apc.llm_client.call_llm", side_effect=Exception("No LLM")),
+            patch("appliers.claude.CLAUDE_MD", self.claude_md),
+            patch("llm_client.call_llm", side_effect=Exception("No LLM")),
         ):
-            from apc.appliers.claude import ClaudeApplier
+            from appliers.claude import ClaudeApplier
 
             applier = ClaudeApplier()
             count = applier.apply_memory_via_llm(collected, manifest)
@@ -235,11 +235,11 @@ class TestClaudeApplier(unittest.TestCase):
         )
 
         with (
-            patch("apc.appliers.claude.CLAUDE_MD", self.claude_md),
-            patch("apc.appliers.claude.CLAUDE_DIR", self.claude_dir),
-            patch("apc.llm_client.call_llm", return_value=llm_response),
+            patch("appliers.claude.CLAUDE_MD", self.claude_md),
+            patch("appliers.claude.CLAUDE_DIR", self.claude_dir),
+            patch("llm_client.call_llm", return_value=llm_response),
         ):
-            from apc.appliers.claude import ClaudeApplier
+            from appliers.claude import ClaudeApplier
 
             applier = ClaudeApplier()
             count = applier.apply_memory_via_llm(collected, manifest)
@@ -249,7 +249,7 @@ class TestClaudeApplier(unittest.TestCase):
 
     def test_apply_memory_via_llm_no_schema_returns_zero(self):
         """Appliers without MEMORY_SCHEMA should return 0."""
-        from apc.appliers.cursor import CursorApplier
+        from appliers.cursor import CursorApplier
 
         applier = CursorApplier()
         manifest = self._manifest()
@@ -282,8 +282,8 @@ class TestClaudeApplier(unittest.TestCase):
             },
         ]
 
-        with patch("apc.appliers.claude.CLAUDE_JSON", self.claude_json):
-            from apc.appliers.claude import ClaudeApplier
+        with patch("appliers.claude.CLAUDE_JSON", self.claude_json):
+            from appliers.claude import ClaudeApplier
 
             applier = ClaudeApplier()
             applier.apply_mcp_servers(servers_v1, {}, manifest)
@@ -302,7 +302,7 @@ class TestClaudeApplier(unittest.TestCase):
             },
         ]
 
-        with patch("apc.appliers.claude.CLAUDE_JSON", self.claude_json):
+        with patch("appliers.claude.CLAUDE_JSON", self.claude_json):
             applier = ClaudeApplier()
             applier.apply_mcp_servers(servers_v2, {}, manifest2)
 
@@ -320,8 +320,8 @@ class TestClaudeApplier(unittest.TestCase):
         manifest = self._manifest()
         manifest.record_skill("old-skill", file_path=str(skill_file), content=skill_content)
 
-        with patch("apc.appliers.claude.CLAUDE_COMMANDS_DIR", self.commands_dir):
-            from apc.appliers.claude import ClaudeApplier
+        with patch("appliers.claude.CLAUDE_COMMANDS_DIR", self.commands_dir):
+            from appliers.claude import ClaudeApplier
 
             applier = ClaudeApplier()
             # Current skills don't include "old-skill"
@@ -342,8 +342,8 @@ class TestClaudeApplier(unittest.TestCase):
         # User edits the file
         skill_file.write_text("# User modified this!", encoding="utf-8")
 
-        with patch("apc.appliers.claude.CLAUDE_COMMANDS_DIR", self.commands_dir):
-            from apc.appliers.claude import ClaudeApplier
+        with patch("appliers.claude.CLAUDE_COMMANDS_DIR", self.commands_dir):
+            from appliers.claude import ClaudeApplier
 
             applier = ClaudeApplier()
             applier.prune([], [], manifest)
@@ -375,8 +375,8 @@ class TestCursorApplier(unittest.TestCase):
         ]
         manifest = self._manifest()
 
-        with patch("apc.appliers.cursor.CURSOR_RULES_DIR", self.rules_dir):
-            from apc.appliers.cursor import CursorApplier
+        with patch("appliers.cursor.CURSOR_RULES_DIR", self.rules_dir):
+            from appliers.cursor import CursorApplier
 
             applier = CursorApplier()
             count = applier.apply_skills(skills, manifest)
@@ -399,8 +399,8 @@ class TestCursorApplier(unittest.TestCase):
         ]
         manifest = self._manifest()
 
-        with patch("apc.appliers.cursor.CURSOR_MCP_JSON", self.mcp_json):
-            from apc.appliers.cursor import CursorApplier
+        with patch("appliers.cursor.CURSOR_MCP_JSON", self.mcp_json):
+            from appliers.cursor import CursorApplier
 
             applier = CursorApplier()
             count = applier.apply_mcp_servers(servers, {}, manifest)
@@ -419,8 +419,8 @@ class TestReadExistingMemoryFiles(unittest.TestCase):
         claude_md = Path(self.tmpdir) / "CLAUDE.md"
         claude_md.write_text("# My context\n- test", encoding="utf-8")
 
-        with patch("apc.appliers.claude.CLAUDE_MD", claude_md):
-            from apc.appliers.claude import ClaudeApplier
+        with patch("appliers.claude.CLAUDE_MD", claude_md):
+            from appliers.claude import ClaudeApplier
 
             applier = ClaudeApplier()
             result = applier._read_existing_memory_files()
@@ -429,8 +429,8 @@ class TestReadExistingMemoryFiles(unittest.TestCase):
         self.assertIn("My context", result[str(claude_md)])
 
     def test_claude_no_existing_files(self):
-        with patch("apc.appliers.claude.CLAUDE_MD", Path(self.tmpdir) / "nonexistent.md"):
-            from apc.appliers.claude import ClaudeApplier
+        with patch("appliers.claude.CLAUDE_MD", Path(self.tmpdir) / "nonexistent.md"):
+            from appliers.claude import ClaudeApplier
 
             applier = ClaudeApplier()
             result = applier._read_existing_memory_files()
@@ -450,13 +450,13 @@ class TestReadExistingMemoryFiles(unittest.TestCase):
         tools_md.write_text("# Tools", encoding="utf-8")
 
         with (
-            patch("apc.appliers.openclaw.OPENCLAW_USER_MD", user_md),
-            patch("apc.appliers.openclaw.OPENCLAW_MEMORY_MD", memory_md),
-            patch("apc.appliers.openclaw.OPENCLAW_IDENTITY_MD", identity_md),
-            patch("apc.appliers.openclaw.OPENCLAW_SOUL_MD", soul_md),
-            patch("apc.appliers.openclaw.OPENCLAW_TOOLS_MD", tools_md),
+            patch("appliers.openclaw.OPENCLAW_USER_MD", user_md),
+            patch("appliers.openclaw.OPENCLAW_MEMORY_MD", memory_md),
+            patch("appliers.openclaw.OPENCLAW_IDENTITY_MD", identity_md),
+            patch("appliers.openclaw.OPENCLAW_SOUL_MD", soul_md),
+            patch("appliers.openclaw.OPENCLAW_TOOLS_MD", tools_md),
         ):
-            from apc.appliers.openclaw import OpenClawApplier
+            from appliers.openclaw import OpenClawApplier
 
             applier = OpenClawApplier()
             result = applier._read_existing_memory_files()

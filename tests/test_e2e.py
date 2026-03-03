@@ -8,14 +8,14 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from apc.appliers.manifest import ToolManifest
+from appliers.manifest import ToolManifest
 
 
 class TestMemoryReconstruction(unittest.TestCase):
     """Test that CLAUDE.md is properly rebuilt from memory entries."""
 
     def test_rebuild_claude_md(self):
-        from apc.appliers.claude import ClaudeApplier
+        from appliers.claude import ClaudeApplier
 
         tmpdir = tempfile.mkdtemp()
         claude_dir = Path(tmpdir) / ".claude"
@@ -31,8 +31,8 @@ class TestMemoryReconstruction(unittest.TestCase):
         ]
 
         with (
-            patch("apc.appliers.claude.CLAUDE_MD", claude_md),
-            patch("apc.appliers.claude.CLAUDE_DIR", claude_dir),
+            patch("appliers.claude.CLAUDE_MD", claude_md),
+            patch("appliers.claude.CLAUDE_DIR", claude_dir),
         ):
             applier = ClaudeApplier()
             count = applier.apply_memory(entries, manifest)

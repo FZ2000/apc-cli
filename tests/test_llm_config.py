@@ -15,14 +15,14 @@ class TestAuthProfiles(unittest.TestCase):
 
     def _patch_paths(self):
         return (
-            patch("apc.llm_config._auth_profiles_path", return_value=self.auth_path),
-            patch("apc.llm_config._models_path", return_value=self.models_path),
+            patch("llm_config._auth_profiles_path", return_value=self.auth_path),
+            patch("llm_config._models_path", return_value=self.models_path),
         )
 
     def test_add_and_load_profile(self):
         p1, p2 = self._patch_paths()
         with p1, p2:
-            from apc.llm_config import add_auth_profile, load_auth_profiles
+            from llm_config import add_auth_profile, load_auth_profiles
 
             key = add_auth_profile("anthropic", "default", "api_key", key="sk-ant-test123")
 
@@ -36,7 +36,7 @@ class TestAuthProfiles(unittest.TestCase):
     def test_remove_profile(self):
         p1, p2 = self._patch_paths()
         with p1, p2:
-            from apc.llm_config import add_auth_profile, load_auth_profiles, remove_auth_profile
+            from llm_config import add_auth_profile, load_auth_profiles, remove_auth_profile
 
             add_auth_profile("openai", "default", "api_key", key="sk-test")
             result = remove_auth_profile("openai:default")
@@ -48,7 +48,7 @@ class TestAuthProfiles(unittest.TestCase):
     def test_remove_nonexistent_profile(self):
         p1, p2 = self._patch_paths()
         with p1, p2:
-            from apc.llm_config import remove_auth_profile
+            from llm_config import remove_auth_profile
 
             result = remove_auth_profile("nonexistent:profile")
             self.assertFalse(result)
@@ -56,7 +56,7 @@ class TestAuthProfiles(unittest.TestCase):
     def test_get_auth_profile(self):
         p1, p2 = self._patch_paths()
         with p1, p2:
-            from apc.llm_config import add_auth_profile, get_auth_profile
+            from llm_config import add_auth_profile, get_auth_profile
 
             add_auth_profile("anthropic", "work", "api_key", key="sk-work")
 
@@ -67,7 +67,7 @@ class TestAuthProfiles(unittest.TestCase):
     def test_get_default_profile_for_provider(self):
         p1, p2 = self._patch_paths()
         with p1, p2:
-            from apc.llm_config import add_auth_profile, get_default_profile_for_provider
+            from llm_config import add_auth_profile, get_default_profile_for_provider
 
             add_auth_profile("anthropic", "default", "api_key", key="sk-default")
             add_auth_profile("anthropic", "work", "api_key", key="sk-work")
@@ -79,7 +79,7 @@ class TestAuthProfiles(unittest.TestCase):
     def test_multiple_profiles_order(self):
         p1, p2 = self._patch_paths()
         with p1, p2:
-            from apc.llm_config import add_auth_profile, load_auth_profiles
+            from llm_config import add_auth_profile, load_auth_profiles
 
             add_auth_profile("anthropic", "default", "api_key", key="sk-1")
             add_auth_profile("anthropic", "work", "api_key", key="sk-2")
@@ -97,14 +97,14 @@ class TestModelsConfig(unittest.TestCase):
 
     def _patch_paths(self):
         return (
-            patch("apc.llm_config._auth_profiles_path", return_value=self.auth_path),
-            patch("apc.llm_config._models_path", return_value=self.models_path),
+            patch("llm_config._auth_profiles_path", return_value=self.auth_path),
+            patch("llm_config._models_path", return_value=self.models_path),
         )
 
     def test_set_and_get_default_model(self):
         p1, p2 = self._patch_paths()
         with p1, p2:
-            from apc.llm_config import get_default_model, set_default_model
+            from llm_config import get_default_model, set_default_model
 
             set_default_model("anthropic/claude-sonnet-4-6")
             result = get_default_model()
@@ -114,7 +114,7 @@ class TestModelsConfig(unittest.TestCase):
     def test_get_default_model_none(self):
         p1, p2 = self._patch_paths()
         with p1, p2:
-            from apc.llm_config import get_default_model
+            from llm_config import get_default_model
 
             result = get_default_model()
             self.assertIsNone(result)
@@ -122,7 +122,7 @@ class TestModelsConfig(unittest.TestCase):
     def test_ensure_provider_in_models(self):
         p1, p2 = self._patch_paths()
         with p1, p2:
-            from apc.llm_config import ensure_provider_in_models, load_models_config
+            from llm_config import ensure_provider_in_models, load_models_config
 
             ensure_provider_in_models(
                 "anthropic",
@@ -138,7 +138,7 @@ class TestModelsConfig(unittest.TestCase):
     def test_ensure_provider_idempotent(self):
         p1, p2 = self._patch_paths()
         with p1, p2:
-            from apc.llm_config import ensure_provider_in_models, load_models_config
+            from llm_config import ensure_provider_in_models, load_models_config
 
             ensure_provider_in_models(
                 "openai", "https://api.openai.com/v1", "openai-completions", ["gpt-4o"]
@@ -154,7 +154,7 @@ class TestModelsConfig(unittest.TestCase):
     def test_resolve_model(self):
         p1, p2 = self._patch_paths()
         with p1, p2:
-            from apc.llm_config import ensure_provider_in_models, resolve_model, set_default_model
+            from llm_config import ensure_provider_in_models, resolve_model, set_default_model
 
             ensure_provider_in_models(
                 "anthropic",
@@ -173,7 +173,7 @@ class TestModelsConfig(unittest.TestCase):
     def test_resolve_model_none_when_not_configured(self):
         p1, p2 = self._patch_paths()
         with p1, p2:
-            from apc.llm_config import resolve_model
+            from llm_config import resolve_model
 
             result = resolve_model()
             self.assertIsNone(result)
@@ -187,14 +187,14 @@ class TestResolveApiKey(unittest.TestCase):
 
     def _patch_paths(self):
         return (
-            patch("apc.llm_config._auth_profiles_path", return_value=self.auth_path),
-            patch("apc.llm_config._models_path", return_value=self.models_path),
+            patch("llm_config._auth_profiles_path", return_value=self.auth_path),
+            patch("llm_config._models_path", return_value=self.models_path),
         )
 
     def test_resolve_from_profile(self):
         p1, p2 = self._patch_paths()
         with p1, p2:
-            from apc.llm_config import add_auth_profile, resolve_api_key
+            from llm_config import add_auth_profile, resolve_api_key
 
             add_auth_profile("anthropic", "default", "api_key", key="sk-saved")
 
@@ -204,7 +204,7 @@ class TestResolveApiKey(unittest.TestCase):
     def test_resolve_from_explicit_profile(self):
         p1, p2 = self._patch_paths()
         with p1, p2:
-            from apc.llm_config import add_auth_profile, resolve_api_key
+            from llm_config import add_auth_profile, resolve_api_key
 
             add_auth_profile("anthropic", "default", "api_key", key="sk-default")
             add_auth_profile("anthropic", "work", "api_key", key="sk-work")
@@ -215,7 +215,7 @@ class TestResolveApiKey(unittest.TestCase):
     def test_resolve_from_env_var(self):
         p1, p2 = self._patch_paths()
         with p1, p2:
-            from apc.llm_config import resolve_api_key
+            from llm_config import resolve_api_key
 
             with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "sk-env-key"}):
                 result = resolve_api_key("anthropic")
@@ -224,7 +224,7 @@ class TestResolveApiKey(unittest.TestCase):
     def test_resolve_none_when_not_configured(self):
         p1, p2 = self._patch_paths()
         with p1, p2:
-            from apc.llm_config import resolve_api_key
+            from llm_config import resolve_api_key
 
             with patch.dict(os.environ, {}, clear=True):
                 result = resolve_api_key("anthropic")
@@ -233,13 +233,13 @@ class TestResolveApiKey(unittest.TestCase):
 
 class TestProviderRegistry(unittest.TestCase):
     def test_all_required_providers_present(self):
-        from apc.llm_config import PROVIDERS
+        from llm_config import PROVIDERS
 
         expected = {"anthropic", "openai", "gemini", "qwen", "glm", "minimax", "kimi", "custom"}
         self.assertEqual(set(PROVIDERS.keys()), expected)
 
     def test_all_providers_have_required_fields(self):
-        from apc.llm_config import PROVIDERS
+        from llm_config import PROVIDERS
 
         for name, pdef in PROVIDERS.items():
             self.assertTrue(pdef.name, f"{name} missing name")
@@ -251,12 +251,12 @@ class TestProviderRegistry(unittest.TestCase):
             )
 
     def test_anthropic_uses_anthropic_dialect(self):
-        from apc.llm_config import PROVIDERS
+        from llm_config import PROVIDERS
 
         self.assertEqual(PROVIDERS["anthropic"].api_dialect, "anthropic-messages")
 
     def test_openai_uses_openai_dialect(self):
-        from apc.llm_config import PROVIDERS
+        from llm_config import PROVIDERS
 
         self.assertEqual(PROVIDERS["openai"].api_dialect, "openai-completions")
 
@@ -269,14 +269,14 @@ class TestNonInteractiveConfigure(unittest.TestCase):
 
     def _patch_paths(self):
         return (
-            patch("apc.llm_config._auth_profiles_path", return_value=self.auth_path),
-            patch("apc.llm_config._models_path", return_value=self.models_path),
+            patch("llm_config._auth_profiles_path", return_value=self.auth_path),
+            patch("llm_config._models_path", return_value=self.models_path),
         )
 
     def test_configure_anthropic(self):
         p1, p2 = self._patch_paths()
         with p1, p2:
-            from apc.llm_config import (
+            from llm_config import (
                 configure_non_interactive,
                 get_default_model,
                 load_auth_profiles,
@@ -296,7 +296,7 @@ class TestNonInteractiveConfigure(unittest.TestCase):
     def test_configure_custom_provider(self):
         p1, p2 = self._patch_paths()
         with p1, p2:
-            from apc.llm_config import configure_non_interactive, load_models_config
+            from llm_config import configure_non_interactive, load_models_config
 
             configure_non_interactive(
                 provider="custom",

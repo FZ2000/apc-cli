@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from apc.appliers.memory_section import (
+from appliers.memory_section import (
     BEGIN_MARKER,
     END_MARKER,
     build_memory_section,

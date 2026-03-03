@@ -30,8 +30,8 @@ Do something useful.
 """
         (self.commands_dir / "test-skill.md").write_text(skill_content)
 
-        with patch("apc.extractors.claude.CLAUDE_COMMANDS_DIR", self.commands_dir):
-            from apc.extractors.claude import ClaudeExtractor
+        with patch("extractors.claude.CLAUDE_COMMANDS_DIR", self.commands_dir):
+            from extractors.claude import ClaudeExtractor
 
             extractor = ClaudeExtractor()
             skills = extractor.extract_skills()
@@ -55,8 +55,8 @@ Do something useful.
         }
         self.claude_json.write_text(json.dumps(mcp_data))
 
-        with patch("apc.extractors.claude.CLAUDE_JSON", self.claude_json):
-            from apc.extractors.claude import ClaudeExtractor
+        with patch("extractors.claude.CLAUDE_JSON", self.claude_json):
+            from extractors.claude import ClaudeExtractor
 
             extractor = ClaudeExtractor()
             servers = extractor.extract_mcp_servers()
@@ -80,10 +80,10 @@ Do something useful.
         self.claude_md.write_text(content)
 
         with patch(
-            "apc.extractors.claude.MEMORY_FILES",
+            "extractors.claude.MEMORY_FILES",
             [{"path": self.claude_md, "label": "Instructions (CLAUDE.md)"}],
         ):
-            from apc.extractors.claude import ClaudeExtractor
+            from extractors.claude import ClaudeExtractor
 
             extractor = ClaudeExtractor()
             entries = extractor.extract_memory()
@@ -103,10 +103,8 @@ Do something useful.
         content = "# Test content\n- Some preference"
         self.claude_md.write_text(content)
 
-        with patch(
-            "apc.extractors.claude.MEMORY_FILES", [{"path": self.claude_md, "label": "test"}]
-        ):
-            from apc.extractors.claude import ClaudeExtractor
+        with patch("extractors.claude.MEMORY_FILES", [{"path": self.claude_md, "label": "test"}]):
+            from extractors.claude import ClaudeExtractor
 
             extractor = ClaudeExtractor()
             entries1 = extractor.extract_memory()
@@ -116,7 +114,7 @@ Do something useful.
 
     def test_extract_memory_different_content_different_id(self):
         """Different content gets different IDs."""
-        from apc.extractors.claude import _content_hash_id
+        from extractors.claude import _content_hash_id
 
         id1 = _content_hash_id("claude", "CLAUDE.md", "content A")
         id2 = _content_hash_id("claude", "CLAUDE.md", "content B")
@@ -127,10 +125,8 @@ Do something useful.
         """Empty files should be skipped."""
         self.claude_md.write_text("")
 
-        with patch(
-            "apc.extractors.claude.MEMORY_FILES", [{"path": self.claude_md, "label": "test"}]
-        ):
-            from apc.extractors.claude import ClaudeExtractor
+        with patch("extractors.claude.MEMORY_FILES", [{"path": self.claude_md, "label": "test"}]):
+            from extractors.claude import ClaudeExtractor
 
             extractor = ClaudeExtractor()
             entries = extractor.extract_memory()
@@ -141,8 +137,8 @@ Do something useful.
         """Non-existent files should be skipped."""
         fake_path = Path(self.tmpdir) / "nonexistent.md"
 
-        with patch("apc.extractors.claude.MEMORY_FILES", [{"path": fake_path, "label": "test"}]):
-            from apc.extractors.claude import ClaudeExtractor
+        with patch("extractors.claude.MEMORY_FILES", [{"path": fake_path, "label": "test"}]):
+            from extractors.claude import ClaudeExtractor
 
             extractor = ClaudeExtractor()
             entries = extractor.extract_memory()
@@ -150,8 +146,8 @@ Do something useful.
         self.assertEqual(len(entries), 0)
 
     def test_extract_skills_no_directory(self):
-        with patch("apc.extractors.claude.CLAUDE_COMMANDS_DIR", Path("/nonexistent")):
-            from apc.extractors.claude import ClaudeExtractor
+        with patch("extractors.claude.CLAUDE_COMMANDS_DIR", Path("/nonexistent")):
+            from extractors.claude import ClaudeExtractor
 
             extractor = ClaudeExtractor()
             skills = extractor.extract_skills()
@@ -173,13 +169,13 @@ class TestOpenClawExtractor(unittest.TestCase):
         self.memory_md.write_text("# Memory\n- User prefers TypeScript\n")
 
         with patch(
-            "apc.extractors.openclaw.MEMORY_FILES",
+            "extractors.openclaw.MEMORY_FILES",
             [
                 {"path": self.user_md, "label": "Personal context (USER.md)"},
                 {"path": self.memory_md, "label": "Long-term memory (MEMORY.md)"},
             ],
         ):
-            from apc.extractors.openclaw import OpenClawExtractor
+            from extractors.openclaw import OpenClawExtractor
 
             extractor = OpenClawExtractor()
             entries = extractor.extract_memory()
@@ -197,12 +193,12 @@ class TestOpenClawExtractor(unittest.TestCase):
         self.user_md.write_text(content)
 
         with patch(
-            "apc.extractors.openclaw.MEMORY_FILES",
+            "extractors.openclaw.MEMORY_FILES",
             [
                 {"path": self.user_md, "label": "test"},
             ],
         ):
-            from apc.extractors.openclaw import OpenClawExtractor
+            from extractors.openclaw import OpenClawExtractor
 
             extractor = OpenClawExtractor()
             entries1 = extractor.extract_memory()
@@ -214,12 +210,12 @@ class TestOpenClawExtractor(unittest.TestCase):
         self.user_md.write_text("   \n  ")
 
         with patch(
-            "apc.extractors.openclaw.MEMORY_FILES",
+            "extractors.openclaw.MEMORY_FILES",
             [
                 {"path": self.user_md, "label": "test"},
             ],
         ):
-            from apc.extractors.openclaw import OpenClawExtractor
+            from extractors.openclaw import OpenClawExtractor
 
             extractor = OpenClawExtractor()
             entries = extractor.extract_memory()
@@ -246,8 +242,8 @@ class TestCursorExtractor(unittest.TestCase):
         }
         self.mcp_json.write_text(json.dumps(mcp_data))
 
-        with patch("apc.extractors.cursor.CURSOR_MCP_JSON", self.mcp_json):
-            from apc.extractors.cursor import CursorExtractor
+        with patch("extractors.cursor.CURSOR_MCP_JSON", self.mcp_json):
+            from extractors.cursor import CursorExtractor
 
             extractor = CursorExtractor()
             servers = extractor.extract_mcp_servers()
@@ -258,7 +254,7 @@ class TestCursorExtractor(unittest.TestCase):
 
 class TestSecretsModule(unittest.TestCase):
     def test_detect_and_redact(self):
-        from apc.secrets import detect_and_redact
+        from secrets_manager import detect_and_redact
 
         env = {
             "GITHUB_TOKEN": "ghp_abc123",
@@ -276,7 +272,7 @@ class TestSecretsModule(unittest.TestCase):
         self.assertEqual(secrets["API_KEY"], "sk-test")
 
     def test_already_redacted_not_double_redacted(self):
-        from apc.secrets import detect_and_redact
+        from secrets_manager import detect_and_redact
 
         env = {"GITHUB_TOKEN": "${GITHUB_TOKEN}"}
         redacted, secrets = detect_and_redact(env)
@@ -287,7 +283,7 @@ class TestSecretsModule(unittest.TestCase):
 
 class TestFrontmatterParser(unittest.TestCase):
     def test_parse_with_frontmatter(self):
-        from apc.frontmatter_parser import parse_frontmatter
+        from frontmatter_parser import parse_frontmatter
 
         content = "---\nname: test\ntags:\n  - a\n  - b\n---\n\n# Body\nHello"
         metadata, body = parse_frontmatter(content)
@@ -297,7 +293,7 @@ class TestFrontmatterParser(unittest.TestCase):
         self.assertIn("Hello", body)
 
     def test_parse_without_frontmatter(self):
-        from apc.frontmatter_parser import parse_frontmatter
+        from frontmatter_parser import parse_frontmatter
 
         content = "# Just markdown\nNo frontmatter here"
         metadata, body = parse_frontmatter(content)
@@ -306,7 +302,7 @@ class TestFrontmatterParser(unittest.TestCase):
         self.assertEqual(body, content)
 
     def test_render_frontmatter(self):
-        from apc.frontmatter_parser import render_frontmatter
+        from frontmatter_parser import render_frontmatter
 
         metadata = {"name": "test", "tags": ["a"]}
         body = "# Hello"
@@ -320,7 +316,7 @@ class TestFrontmatterParser(unittest.TestCase):
 class TestCacheMergeMemory(unittest.TestCase):
     def test_merge_memory_new_format(self):
         """Content-hash IDs deduplicate across runs."""
-        from apc.cache import merge_memory
+        from cache import merge_memory
 
         existing = [
             {"id": "abc123", "source_tool": "claude", "source_file": "CLAUDE.md", "content": "old"},
@@ -340,7 +336,7 @@ class TestCacheMergeMemory(unittest.TestCase):
 
     def test_merge_memory_different_ids(self):
         """Different IDs are kept as separate entries."""
-        from apc.cache import merge_memory
+        from cache import merge_memory
 
         existing = [
             {"id": "aaa", "source_tool": "claude", "content": "A"},
@@ -354,7 +350,7 @@ class TestCacheMergeMemory(unittest.TestCase):
 
     def test_merge_memory_legacy_format(self):
         """Old entry_id format still works."""
-        from apc.cache import merge_memory
+        from cache import merge_memory
 
         existing = [
             {"entry_id": "20250301_abc123", "category": "preference", "content": "old"},

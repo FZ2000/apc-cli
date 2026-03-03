@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from apc.appliers.manifest import ToolManifest, _sha256
+from appliers.manifest import ToolManifest, _sha256
 
 
 class TestToolManifest(unittest.TestCase):
