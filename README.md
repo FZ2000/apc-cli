@@ -29,11 +29,13 @@ Collect, manage, and sync AI agent configs (skills, MCP servers, memory, setting
 
 ## Install
 
-**One-liner (recommended):**
+**One-liner (requires [GitHub CLI](https://cli.github.com/)):**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/FZ2000/apc-cli/main/install.sh | bash
+bash <(gh api repos/FZ2000/apc-cli/contents/install.sh --jq '.content' | base64 -d)
 ```
+
+This clones the repo to `~/.apc-cli`, creates a venv, and symlinks `apc` into `~/.local/bin`.
 
 **pip from GitHub:**
 
