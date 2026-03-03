@@ -29,8 +29,16 @@ Collect, manage, and sync AI agent configs (skills, MCP servers, memory, setting
 
 ## Install
 
+**One-liner (recommended):**
+
 ```bash
-pip install -e .
+curl -fsSL https://raw.githubusercontent.com/FZ2000/apc-cli/main/install.sh | bash
+```
+
+**pip from GitHub:**
+
+```bash
+pip install git+https://github.com/FZ2000/apc-cli.git
 ```
 
 ## Quick Start
@@ -102,8 +110,8 @@ pip install -e ".[dev]"
 pytest -v
 
 # Lint and format check
-ruff check src/ tests/
-ruff format --check src/ tests/
+ruff check . --exclude .venv
+ruff format --check . --exclude .venv
 ```
 
 ## License
