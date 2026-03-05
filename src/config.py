@@ -15,3 +15,10 @@ def get_cache_dir() -> Path:
     cache_dir = get_config_dir() / "cache"
     cache_dir.mkdir(exist_ok=True)
     return cache_dir
+
+
+def get_skills_dir() -> Path:
+    """Get or create the ~/.apc/skills/ directory for installed skills."""
+    skills_dir = get_config_dir() / "skills"
+    skills_dir.mkdir(exist_ok=True)
+    return skills_dir

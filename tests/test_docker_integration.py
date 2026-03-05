@@ -566,21 +566,7 @@ class TestConfigure:
 
 
 # ---------------------------------------------------------------------------
-# Phase 11: apc install (network-dependent, graceful failure)
-# ---------------------------------------------------------------------------
-
-
-class TestInstall:
-    def test_install_nonexistent_fails_gracefully(self, runner, cli):
-        result = runner.invoke(cli, ["install", "test-nonexistent-skill-xyz"])
-        # Should not crash — either exit 0 with "not found" message
-        # or exit 1 but with a clean error message
-        combined = result.output
-        assert "not found" in combined.lower() or result.exit_code == 0
-
-
-# ---------------------------------------------------------------------------
-# Phase 12: Full round-trip — collect → sync → verify files
+# Phase 11: Full round-trip — collect → sync → verify files
 # ---------------------------------------------------------------------------
 
 

@@ -7,8 +7,8 @@ from typing import List, Optional, Tuple
 
 from appliers import get_applier
 from cache import load_local_bundle, load_mcp_servers
+from config import get_skills_dir
 from extractors import detect_installed_tools
-from marketplace import get_skills_dir
 from ui import error, numbered_selection, success, warning
 
 
