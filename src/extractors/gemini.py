@@ -1,8 +1,8 @@
-"""Gemini CLI extractor — MCP servers and settings."""
+"""Gemini CLI extractor — MCP servers."""
 
 import json
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from extractors.base import BaseExtractor
 
@@ -40,21 +40,3 @@ class GeminiExtractor(BaseExtractor):
 
     def extract_memory(self) -> List[Dict]:
         return []
-
-    def extract_settings(self) -> Optional[Dict]:
-        if not GEMINI_SETTINGS.exists():
-            return None
-        try:
-            raw = json.loads(GEMINI_SETTINGS.read_text(encoding="utf-8"))
-            # Exclude mcpServers from settings — they're handled separately
-            settings = {k: v for k, v in raw.items() if k != "mcpServers"}
-            if not settings:
-                return None
-            return {
-                "gemini": {
-                    "raw_json": settings,
-                    "source_path": str(GEMINI_SETTINGS),
-                }
-            }
-        except (json.JSONDecodeError, IOError):
-            return None

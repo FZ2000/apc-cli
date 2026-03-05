@@ -123,29 +123,24 @@ class BaseApplier(ABC):
 
     @abstractmethod
     def apply_mcp_servers(
-        self, servers: List[Dict], secrets: Dict[str, str], manifest: ToolManifest
+        self,
+        servers: List[Dict],
+        secrets: Dict[str, str],
+        manifest: ToolManifest,
+        override: bool = False,
     ) -> int:
         """Write MCP server configurations, injecting resolved secrets.
-        Returns number of servers applied."""
-        pass
 
-    @abstractmethod
-    def apply_memory(self, entries: List[Dict], manifest: ToolManifest) -> int:
-        """Write memory entries to the tool's memory file (legacy direct apply).
-        Returns number of entries applied."""
-        pass
-
-    @abstractmethod
-    def apply_settings(self, settings: Dict) -> bool:
-        """Apply tool-specific settings. Returns True if applied."""
+        If override is True, replace all existing MCP servers with the given list.
+        If False (default), merge/append into existing servers.
+        Returns number of servers applied.
+        """
         pass
 
     def apply_memory_via_llm(self, collected_memory: List[Dict], manifest: ToolManifest) -> int:
         """Use LLM to transform collected memory into tool-native format.
 
-        Falls back to legacy apply_memory() if no MEMORY_SCHEMA is defined
-        or if the LLM is not configured.
-
+        Requires an LLM to be configured via 'apc configure'.
         Returns number of files written.
         """
         if not self.MEMORY_SCHEMA:
@@ -158,7 +153,11 @@ class BaseApplier(ABC):
         try:
             from llm_client import call_llm
         except ImportError:
-            return self.apply_memory(collected_memory, manifest)
+            warning(
+                f"LLM not available for memory sync to {self.TOOL_NAME}. "
+                "Run 'apc configure' to set up an LLM provider."
+            )
+            return 0
 
         # Read existing files
         existing = self._read_existing_memory_files()
@@ -179,7 +178,14 @@ class BaseApplier(ABC):
                     "Do not wrap in markdown fences. Do not include commentary or explanation.",
                 )
         except Exception as e:
-            warning(f"LLM call failed ({e}), skipping memory sync for {self.TOOL_NAME}")
+            error_msg = str(e)
+            if "No LLM model configured" in error_msg:
+                warning(
+                    f"No LLM configured for memory sync to {self.TOOL_NAME}. "
+                    "Run 'apc configure' to set up an LLM provider."
+                )
+            else:
+                warning(f"LLM call failed ({e}), skipping memory sync for {self.TOOL_NAME}")
             return 0
 
         # Parse structured output

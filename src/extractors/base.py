@@ -1,7 +1,7 @@
 """Base extractor ABC for all tool-specific extractors."""
 
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 
 class BaseExtractor(ABC):
@@ -21,10 +21,4 @@ class BaseExtractor(ABC):
     def extract_memory(self) -> List[Dict]:
         """Extract memory/context entries.
         Returns list of dicts matching MemoryEntry fields."""
-        pass
-
-    @abstractmethod
-    def extract_settings(self) -> Optional[Dict]:
-        """Extract tool-specific settings.
-        Returns dict or None if no settings found."""
         pass

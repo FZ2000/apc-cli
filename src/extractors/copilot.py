@@ -3,7 +3,7 @@
 import hashlib
 import json
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from extractors.base import BaseExtractor
 
@@ -64,6 +64,3 @@ class CopilotExtractor(BaseExtractor):
 
     def extract_memory(self) -> List[Dict]:
         return []
-
-    def extract_settings(self) -> Optional[Dict]:
-        return None

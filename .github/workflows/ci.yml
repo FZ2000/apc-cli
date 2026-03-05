@@ -29,3 +29,10 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: pip install -e ".[dev]"
       - run: pytest -v
+
+  docker-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t apc-test -f tests/Dockerfile .
+      - run: docker run --rm apc-test

@@ -8,11 +8,69 @@ from appliers.base import BaseApplier
 from appliers.manifest import ToolManifest
 
 COPILOT_INSTRUCTIONS = Path(".github") / "copilot-instructions.md"
+COPILOT_INSTRUCTIONS_DIR = Path(".github") / "instructions"
 VSCODE_MCP_JSON = Path(".vscode") / "mcp.json"
+
+COPILOT_MEMORY_SCHEMA = """
+GitHub Copilot reads custom instructions from two locations:
+
+1. .github/copilot-instructions.md — Repository-wide instructions.
+   - Plain Markdown, no frontmatter required.
+   - Automatically attached to every Copilot Chat request in the repository.
+   - Does NOT affect inline code completion (autocomplete).
+   - Use headings (##) to organize sections, bullet points for individual rules.
+   - Keep instructions concise and actionable.
+   - Example content:
+     ## Project Standards
+     - Use TypeScript strict mode for all new files
+     - Follow PEP 8 for Python files
+     - All API endpoints must include error handling
+
+2. .github/instructions/*.instructions.md — Path-specific instructions.
+   - Markdown files with YAML frontmatter containing an `applyTo` glob pattern.
+   - Only included when Copilot is working on files matching the pattern.
+   - Frontmatter format:
+     ---
+     applyTo: "**/*.py"
+     ---
+   - Glob patterns: "**/*.py" (all Python files), "src/**/*.ts" (TS under src/),
+     "**/*.ts,**/*.tsx" (comma-separated for multiple patterns).
+   - Name files descriptively: python.instructions.md, testing.instructions.md.
+   - Example:
+     ---
+     applyTo: "**/*.py"
+     ---
+     ## Python Conventions
+     - Use type hints for all function parameters and return values
+     - Use pytest for all test files
+
+WHAT TO PUT IN INSTRUCTIONS:
+- Coding style preferences (language, formatting, naming conventions)
+- Architecture decisions and patterns
+- Framework-specific guidance
+- Testing conventions
+- Things to avoid
+
+WHAT NOT TO PUT IN INSTRUCTIONS:
+- Personal information (name, timezone)
+- Entire style guides — use a linter
+- Common tool commands — Copilot already knows these
+
+GUIDELINES:
+- Put universal project rules in copilot-instructions.md.
+- Put language/path-specific rules in .github/instructions/ with applyTo globs.
+- Both are combined when both match — they don't replace each other.
+- Keep each file focused on one topic.
+
+OUTPUT: Write files as described above. Use copilot-instructions.md for general rules.
+Use .github/instructions/<topic>.instructions.md with applyTo frontmatter for
+language or path-specific rules.
+"""
 
 
 class CopilotApplier(BaseApplier):
     TOOL_NAME = "copilot"
+    MEMORY_SCHEMA = COPILOT_MEMORY_SCHEMA
 
     def apply_skills(self, skills: List[Dict], manifest: ToolManifest) -> int:
         count = 0
@@ -30,7 +88,11 @@ class CopilotApplier(BaseApplier):
         return count
 
     def apply_mcp_servers(
-        self, servers: List[Dict], secrets: Dict[str, str], manifest: ToolManifest
+        self,
+        servers: List[Dict],
+        secrets: Dict[str, str],
+        manifest: ToolManifest,
+        override: bool = False,
     ) -> int:
         if VSCODE_MCP_JSON.exists():
             try:
@@ -40,24 +102,20 @@ class CopilotApplier(BaseApplier):
         else:
             data = {}
 
-        vscode_servers = data.get("servers", {})
+        if override:
+            vscode_servers = {}
+        else:
+            vscode_servers = data.get("servers", {})
 
-        # Prune orphaned MCP servers
-        if not manifest.is_first_sync:
-            current_names = {
-                s.get("name", "unnamed")
-                for s in servers
-                if not s.get("targets") or "copilot" in s.get("targets", [])
-            }
-            for orphan in set(manifest.managed_mcp_names()) - current_names:
-                vscode_servers.pop(orphan, None)
-                manifest.remove_mcp_server(orphan)
+            # Prune orphaned MCP servers
+            if not manifest.is_first_sync:
+                current_names = {s.get("name", "unnamed") for s in servers}
+                for orphan in set(manifest.managed_mcp_names()) - current_names:
+                    vscode_servers.pop(orphan, None)
+                    manifest.remove_mcp_server(orphan)
 
         count = 0
         for server in servers:
-            targets = server.get("targets", [])
-            if targets and "copilot" not in targets:
-                continue
             name = server.get("name", "unnamed")
 
             env = server.get("env", {}).copy()
@@ -82,8 +140,22 @@ class CopilotApplier(BaseApplier):
         VSCODE_MCP_JSON.write_text(json.dumps(data, indent=2), encoding="utf-8")
         return count
 
-    def apply_memory(self, entries: List[Dict], manifest: ToolManifest) -> int:
-        return 0
+    def _read_existing_memory_files(self) -> Dict[str, str]:
+        """Return {file_path: content} for Copilot's instruction files."""
+        result = {}
+        if COPILOT_INSTRUCTIONS.exists():
+            try:
+                result[str(COPILOT_INSTRUCTIONS)] = COPILOT_INSTRUCTIONS.read_text(
+                    encoding="utf-8"
+                )
+            except IOError:
+                pass
+        if COPILOT_INSTRUCTIONS_DIR.exists():
+            for path in COPILOT_INSTRUCTIONS_DIR.glob("*.instructions.md"):
+                if path.is_file():
+                    try:
+                        result[str(path)] = path.read_text(encoding="utf-8")
+                    except IOError:
+                        pass
+        return result
 
-    def apply_settings(self, settings: Dict) -> bool:
-        return False

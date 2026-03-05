@@ -1,43 +1,57 @@
-"""Tool auto-detection and extractor registry."""
+"""Extractor registry — maps tool names to specialized extractors."""
 
+import importlib
 from pathlib import Path
 from typing import List
 
 from extractors.base import BaseExtractor
 
-TOOL_MARKERS = {
-    "claude": [Path.home() / ".claude", Path.home() / ".claude.json"],
+_SPECIALIZED = {
+    "claude-code": "extractors.claude:ClaudeExtractor",
+    "cursor": "extractors.cursor:CursorExtractor",
+    "gemini-cli": "extractors.gemini:GeminiExtractor",
+    "github-copilot": "extractors.copilot:CopilotExtractor",
+    "windsurf": "extractors.windsurf:WindsurfExtractor",
+    "openclaw": "extractors.openclaw:OpenClawExtractor",
+}
+
+_ALIASES = {
+    "claude": "claude-code",
+    "gemini": "gemini-cli",
+    "copilot": "github-copilot",
+}
+
+# Filesystem paths used to detect if a tool is installed
+_DETECT_PATHS = {
+    "claude-code": [Path.home() / ".claude", Path.home() / ".claude.json"],
     "cursor": [Path.home() / ".cursor"],
-    "gemini": [Path.home() / ".gemini"],
-    "copilot": [Path(".github") / "copilot-instructions.md"],
+    "gemini-cli": [Path.home() / ".gemini"],
+    "github-copilot": [Path.home() / ".copilot", Path.home() / ".github"],
     "windsurf": [Path.home() / ".codeium" / "windsurf"],
     "openclaw": [Path.home() / ".openclaw"],
 }
 
 
 def detect_installed_tools() -> List[str]:
-    """Detect which AI tools are installed on this machine."""
-    return [name for name, markers in TOOL_MARKERS.items() if any(m.exists() for m in markers)]
+    """Detect which supported AI tools are installed on this machine."""
+    found = []
+    for name, paths in _DETECT_PATHS.items():
+        if any(p.exists() for p in paths):
+            found.append(name)
+    return sorted(found)
 
 
 def get_extractor(tool_name: str) -> BaseExtractor:
-    """Get the appropriate extractor for a tool."""
-    from extractors.claude import ClaudeExtractor
-    from extractors.copilot import CopilotExtractor
-    from extractors.cursor import CursorExtractor
-    from extractors.gemini import GeminiExtractor
-    from extractors.openclaw import OpenClawExtractor
-    from extractors.windsurf import WindsurfExtractor
+    """Get the extractor for a supported tool.
 
-    extractors = {
-        "claude": ClaudeExtractor,
-        "cursor": CursorExtractor,
-        "gemini": GeminiExtractor,
-        "copilot": CopilotExtractor,
-        "windsurf": WindsurfExtractor,
-        "openclaw": OpenClawExtractor,
-    }
-    cls = extractors.get(tool_name)
-    if not cls:
-        raise ValueError(f"Unknown tool: {tool_name}")
+    Raises ValueError if the tool is not supported.
+    """
+    resolved = _ALIASES.get(tool_name, tool_name)
+
+    if resolved not in _SPECIALIZED:
+        raise ValueError(f"Unsupported tool: {tool_name}")
+
+    module_path, cls_name = _SPECIALIZED[resolved].split(":")
+    mod = importlib.import_module(module_path)
+    cls = getattr(mod, cls_name)
     return cls()

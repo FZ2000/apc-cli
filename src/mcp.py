@@ -1,13 +1,13 @@
-"""apc mcp commands — list and sync MCP server configurations.
+"""apc mcp commands — list, sync, and remove MCP server configurations.
 
 No login required. No network calls.
 """
 
 import click
 
-from cache import load_mcp_servers
+from cache import load_mcp_servers, save_mcp_servers
 from sync_helpers import resolve_target_tools, sync_mcp
-from ui import header, mcp_list
+from ui import header, info, mcp_list, success, warning
 
 
 @click.group()
@@ -26,8 +26,9 @@ def mcp_list_cmd():
 @mcp.command("sync")
 @click.option("--tools", default=None, help="Comma-separated list of target tools")
 @click.option("--all", "apply_all", is_flag=True, help="Apply to all detected tools")
+@click.option("--override", is_flag=True, help="Replace existing MCP servers instead of merging")
 @click.option("--yes", "-y", is_flag=True, help="Skip confirmation prompt")
-def mcp_sync(tools, apply_all, yes):
+def mcp_sync(tools, apply_all, override, yes):
     """Sync MCP servers to target tools."""
     header("MCP Sync")
 
@@ -36,8 +37,42 @@ def mcp_sync(tools, apply_all, yes):
         return
 
     if not yes:
+        if not override:
+            override = click.confirm(
+                "Override existing MCP servers? (No = append/merge)", default=False
+            )
         if not click.confirm(f"Sync MCP servers to {', '.join(tool_list)}?"):
             click.echo("Cancelled.")
             return
 
-    sync_mcp(tool_list)
+    sync_mcp(tool_list, override=override)
+
+
+@mcp.command("remove")
+@click.argument("name")
+@click.option("--yes", "-y", is_flag=True, help="Skip confirmation prompt")
+def mcp_remove(name, yes):
+    """Remove an MCP server from the cache by name.
+
+    The server will be pruned from target tools on next 'apc sync'.
+    """
+    servers = load_mcp_servers()
+    matches = [s for s in servers if s.get("name") == name]
+
+    if not matches:
+        warning(f"No MCP server named '{name}' in cache.")
+        info("Run 'apc mcp list' to see cached servers.")
+        return
+
+    if not yes:
+        for m in matches:
+            source = m.get("source_tool", "unknown")
+            info(f"  {name} (from {source})")
+        if not click.confirm(f"\nRemove {len(matches)} server(s)?"):
+            info("Cancelled.")
+            return
+
+    remaining = [s for s in servers if s.get("name") != name]
+    save_mcp_servers(remaining)
+    success(f"Removed '{name}' from cache ({len(matches)} entry/entries).")
+    info("Run 'apc sync' to propagate the removal to target tools.")

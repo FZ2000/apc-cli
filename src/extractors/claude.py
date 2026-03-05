@@ -3,7 +3,7 @@
 import hashlib
 import json
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from extractors.base import BaseExtractor
 from frontmatter_parser import parse_frontmatter
@@ -12,8 +12,6 @@ CLAUDE_DIR = Path.home() / ".claude"
 CLAUDE_JSON = Path.home() / ".claude.json"
 CLAUDE_COMMANDS_DIR = CLAUDE_DIR / "commands"
 CLAUDE_MD = CLAUDE_DIR / "CLAUDE.md"
-CLAUDE_SETTINGS = CLAUDE_DIR / "settings.json"
-
 # Registry of memory files this tool declares
 MEMORY_FILES = [
     {"path": CLAUDE_MD, "label": "Instructions (CLAUDE.md)"},
@@ -106,16 +104,3 @@ class ClaudeExtractor(BaseExtractor):
                 continue
         return entries
 
-    def extract_settings(self) -> Optional[Dict]:
-        if not CLAUDE_SETTINGS.exists():
-            return None
-        try:
-            raw = json.loads(CLAUDE_SETTINGS.read_text(encoding="utf-8"))
-            return {
-                "claude": {
-                    "raw_json": raw,
-                    "source_path": str(CLAUDE_SETTINGS),
-                }
-            }
-        except (json.JSONDecodeError, IOError):
-            return None

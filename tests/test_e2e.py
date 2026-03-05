@@ -3,6 +3,7 @@
 These tests require a running backend. Set RUN_E2E_TESTS=true to enable.
 """
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -11,10 +12,10 @@ from unittest.mock import patch
 from appliers.manifest import ToolManifest
 
 
-class TestMemoryReconstruction(unittest.TestCase):
-    """Test that CLAUDE.md is properly rebuilt from memory entries."""
+class TestMemoryViaLLM(unittest.TestCase):
+    """Test that memory sync via LLM writes files correctly."""
 
-    def test_rebuild_claude_md(self):
+    def test_llm_memory_sync_writes_claude_md(self):
         from appliers.claude import ClaudeApplier
 
         tmpdir = tempfile.mkdtemp()
@@ -23,32 +24,49 @@ class TestMemoryReconstruction(unittest.TestCase):
         claude_md = claude_dir / "CLAUDE.md"
         manifest = ToolManifest("claude", path=Path(tmpdir) / "manifest.json")
 
-        entries = [
-            {"category": "preference", "content": "Prefers TypeScript"},
-            {"category": "preference", "content": "Uses 2-space indentation"},
-            {"category": "workflow", "content": "Always runs tests before committing"},
-            {"category": "constraint", "content": "Never use deprecated APIs"},
+        collected = [
+            {
+                "id": "abc123",
+                "source_tool": "openclaw",
+                "source_file": "USER.md",
+                "content": "Prefers TypeScript\nUses 2-space indentation",
+            },
         ]
+
+        llm_response = json.dumps(
+            [{"file_path": str(claude_md), "content": "## Preferences\n- Prefers TypeScript\n- Uses 2-space indentation\n"}]
+        )
 
         with (
             patch("appliers.claude.CLAUDE_MD", claude_md),
             patch("appliers.claude.CLAUDE_DIR", claude_dir),
+            patch("appliers.base.call_llm", return_value=llm_response, create=True),
+            patch("llm_client.call_llm", return_value=llm_response),
         ):
             applier = ClaudeApplier()
-            count = applier.apply_memory(entries, manifest)
+            count = applier.apply_memory_via_llm(collected, manifest)
 
-        self.assertEqual(count, 4)
+        self.assertEqual(count, 1)
         content = claude_md.read_text()
+        self.assertIn("Prefers TypeScript", content)
+        self.assertIn("Uses 2-space indentation", content)
 
-        # Verify structure
-        self.assertIn("# AI Context", content)
-        self.assertIn("## Preferences", content)
-        self.assertIn("- Prefers TypeScript", content)
-        self.assertIn("- Uses 2-space indentation", content)
-        self.assertIn("## Workflow", content)
-        self.assertIn("- Always runs tests before committing", content)
-        self.assertIn("## Constraints", content)
-        self.assertIn("- Never use deprecated APIs", content)
+    def test_no_llm_configured_shows_warning(self):
+        from appliers.claude import ClaudeApplier
+
+        tmpdir = tempfile.mkdtemp()
+        manifest = ToolManifest("claude", path=Path(tmpdir) / "manifest.json")
+
+        collected = [{"id": "abc", "source_tool": "test", "content": "test"}]
+
+        # Simulate LLM not configured
+        from llm_client import LLMError
+
+        with patch("llm_client.call_llm", side_effect=LLMError("No LLM model configured")):
+            applier = ClaudeApplier()
+            count = applier.apply_memory_via_llm(collected, manifest)
+
+        self.assertEqual(count, 0)
 
 
 if __name__ == "__main__":

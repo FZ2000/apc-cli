@@ -7,7 +7,7 @@ from collect import collect
 from llm_config import configure_cmd, models_cmd
 from mcp import mcp
 from memory import memory
-from share import install, marketplace
+from share import install
 from skill import skill
 from status import status
 from sync_helpers import count_installed_skills, resolve_target_tools, sync_all
@@ -58,9 +58,6 @@ cli.add_command(install)
 # MCP
 cli.add_command(mcp)
 
-# Marketplaces
-cli.add_command(marketplace)
-
 # LLM configuration
 cli.add_command(configure_cmd)
 cli.add_command(models_cmd)
@@ -74,9 +71,10 @@ cli.add_command(models_cmd)
     "--all", "apply_all", is_flag=True, help="Apply to all detected tools without selection"
 )
 @click.option("--no-memory", is_flag=True, help="Skip applying memory entries")
+@click.option("--override-mcp", is_flag=True, help="Replace existing MCP servers instead of merging")
 @click.option("--dry-run", is_flag=True, help="Show what would be applied without writing")
 @click.option("--yes", "-y", is_flag=True, help="Skip confirmation prompt")
-def sync(tools, apply_all, no_memory, dry_run, yes):
+def sync(tools, apply_all, no_memory, override_mcp, dry_run, yes):
     """Sync local cache contents to target AI tools.
 
     No login or network required.
@@ -113,11 +111,15 @@ def sync(tools, apply_all, no_memory, dry_run, yes):
 
     # Confirm
     if not yes:
+        if mcp_servers and not override_mcp:
+            override_mcp = click.confirm(
+                "Override existing MCP servers? (No = append/merge)", default=False
+            )
         if not click.confirm("\nProceed?"):
             info("Cancelled.")
             return
 
-    sync_all(tool_list, no_memory=no_memory)
+    sync_all(tool_list, no_memory=no_memory, override_mcp=override_mcp)
 
 
 def main():

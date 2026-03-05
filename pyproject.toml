@@ -26,17 +26,18 @@ requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
+package-dir = {"" = "src"}
 py-modules = [
     "cache", "collect", "config", "frontmatter_parser",
     "llm_client", "llm_config", "main", "marketplace",
-    "mcp", "memory", "repositories", "secrets_manager",
+    "mcp", "memory", "secrets_manager",
     "share", "skill", "status", "sync_helpers", "ui",
 ]
 packages = ["extractors", "appliers"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["."]
+pythonpath = ["src"]
 
 [tool.ruff]
 target-version = "py312"

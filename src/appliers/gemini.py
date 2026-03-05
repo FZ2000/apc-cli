@@ -9,16 +9,73 @@ from appliers.manifest import ToolManifest
 
 GEMINI_DIR = Path.home() / ".gemini"
 GEMINI_SETTINGS = GEMINI_DIR / "settings.json"
+GEMINI_MD = GEMINI_DIR / "GEMINI.md"
+
+GEMINI_MEMORY_SCHEMA = """
+Gemini CLI reads instructions from ~/.gemini/GEMINI.md (global) and ./GEMINI.md (per-project).
+This applier targets the GLOBAL file at ~/.gemini/GEMINI.md.
+
+FORMAT:
+- Plain Markdown. No special schema or frontmatter required.
+- Use headings (##) to organize sections. Use bullet points for rules.
+- Free-form — whatever you write is sent as-is to the model as system context.
+
+SPECIAL SECTION:
+- "## Gemini Added Memories" — Gemini CLI's save_memory tool appends facts here.
+  If this section exists, preserve it and append new items below existing ones.
+  If it doesn't exist, create it at the bottom of the file.
+
+IMPORT SYNTAX:
+- Gemini supports @path/to/file.md imports on their own line.
+  Do NOT use this syntax — write content directly in the file.
+
+WHAT TO PUT IN GEMINI.MD:
+- Coding style preferences (language, formatting, naming)
+- Architecture decisions and project patterns
+- Framework-specific guidance
+- Testing conventions and workflow rules
+- Constraints and things to avoid
+
+WHAT NOT TO PUT:
+- Personal information unrelated to coding (Gemini CLI is a coding assistant)
+- Entire style guides — use a linter
+- Common tool commands — Gemini already knows these
+
+STRUCTURE EXAMPLE:
+  ## Project Context
+  - Python 3.12 project using FastAPI
+  - PostgreSQL with SQLAlchemy ORM
+
+  ## Coding Standards
+  - Use type hints for all functions
+  - Prefer composition over inheritance
+
+  ## Testing
+  - Use pytest with fixtures
+  - Aim for >80% coverage
+
+  ## Gemini Added Memories
+  - Prefers TypeScript over JavaScript
+  - Uses 2-space indentation for YAML
+
+OUTPUT: Write a single file at the GEMINI.md path. Merge collected memory into
+organized sections. Preserve any existing "## Gemini Added Memories" content.
+"""
 
 
 class GeminiApplier(BaseApplier):
     TOOL_NAME = "gemini"
+    MEMORY_SCHEMA = GEMINI_MEMORY_SCHEMA
 
     def apply_skills(self, skills: List[Dict], manifest: ToolManifest) -> int:
         return 0  # Gemini doesn't have a skills format
 
     def apply_mcp_servers(
-        self, servers: List[Dict], secrets: Dict[str, str], manifest: ToolManifest
+        self,
+        servers: List[Dict],
+        secrets: Dict[str, str],
+        manifest: ToolManifest,
+        override: bool = False,
     ) -> int:
         if GEMINI_SETTINGS.exists():
             try:
@@ -28,24 +85,20 @@ class GeminiApplier(BaseApplier):
         else:
             data = {}
 
-        mcp_servers = data.get("mcpServers", {})
+        if override:
+            mcp_servers = {}
+        else:
+            mcp_servers = data.get("mcpServers", {})
 
-        # Prune orphaned MCP servers
-        if not manifest.is_first_sync:
-            current_names = {
-                s.get("name", "unnamed")
-                for s in servers
-                if not s.get("targets") or "gemini" in s.get("targets", [])
-            }
-            for orphan in set(manifest.managed_mcp_names()) - current_names:
-                mcp_servers.pop(orphan, None)
-                manifest.remove_mcp_server(orphan)
+            # Prune orphaned MCP servers
+            if not manifest.is_first_sync:
+                current_names = {s.get("name", "unnamed") for s in servers}
+                for orphan in set(manifest.managed_mcp_names()) - current_names:
+                    mcp_servers.pop(orphan, None)
+                    manifest.remove_mcp_server(orphan)
 
         count = 0
         for server in servers:
-            targets = server.get("targets", [])
-            if targets and "gemini" not in targets:
-                continue
             name = server.get("name", "unnamed")
 
             env = server.get("env", {}).copy()
@@ -70,27 +123,13 @@ class GeminiApplier(BaseApplier):
         GEMINI_SETTINGS.write_text(json.dumps(data, indent=2), encoding="utf-8")
         return count
 
-    def apply_memory(self, entries: List[Dict], manifest: ToolManifest) -> int:
-        return 0
-
-    def apply_settings(self, settings: Dict) -> bool:
-        gemini_settings = settings.get("gemini", {})
-        raw_json = gemini_settings.get("raw_json")
-        if not raw_json:
-            return False
-
-        if GEMINI_SETTINGS.exists():
+    def _read_existing_memory_files(self) -> Dict[str, str]:
+        """Return {file_path: content} for Gemini's memory files."""
+        result = {}
+        if GEMINI_MD.exists():
             try:
-                existing = json.loads(GEMINI_SETTINGS.read_text(encoding="utf-8"))
-                # Preserve mcpServers
-                mcp = existing.get("mcpServers")
-                existing.update(raw_json)
-                if mcp:
-                    existing["mcpServers"] = mcp
-                raw_json = existing
-            except json.JSONDecodeError:
+                result[str(GEMINI_MD)] = GEMINI_MD.read_text(encoding="utf-8")
+            except IOError:
                 pass
+        return result
 
-        GEMINI_DIR.mkdir(parents=True, exist_ok=True)
-        GEMINI_SETTINGS.write_text(json.dumps(raw_json, indent=2), encoding="utf-8")
-        return True

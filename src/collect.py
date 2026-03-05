@@ -18,7 +18,6 @@ from cache import (
     merge_skills,
     save_mcp_servers,
     save_memory,
-    save_settings,
     save_skills,
 )
 from extractors import detect_installed_tools, get_extractor
@@ -95,13 +94,11 @@ def collect(tools, no_memory, yes):
             skills = extractor.extract_skills()
             mcp_servers = extractor.extract_mcp_servers()
             memory = extractor.extract_memory() if not no_memory else []
-            settings = extractor.extract_settings()
 
             tool_extractions[tool_name] = {
                 "skills": skills,
                 "mcp_servers": mcp_servers,
                 "memory": memory,
-                "settings": settings,
             }
             tool_counts[tool_name] = {
                 "skills": len(skills),
@@ -138,13 +135,10 @@ def collect(tools, no_memory, yes):
 
     new_skills = []
     new_mcp_servers = []
-    all_settings = {}
 
     for tool_name, data in tool_extractions.items():
         new_skills.extend(data["skills"])
         new_mcp_servers.extend(data["mcp_servers"])
-        if data["settings"]:
-            all_settings[tool_name] = data["settings"]
 
     # Add collected_at timestamp to selected memory entries
     now = datetime.now(timezone.utc).isoformat()
@@ -174,8 +168,6 @@ def collect(tools, no_memory, yes):
     save_skills(merged_skills)
     save_mcp_servers(merged_mcp)
     save_memory(merged_memory)
-    if all_settings:
-        save_settings({"tool_settings": all_settings})
 
     cache_summary_table(
         len(merged_skills), len(merged_mcp), len(merged_memory), title="Local Cache Updated"

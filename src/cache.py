@@ -59,17 +59,6 @@ def save_memory(entries: List[Dict]) -> None:
     _save_json("memory.json", entries)
 
 
-# --- Settings ---
-
-
-def load_settings() -> Dict:
-    return _load_json("settings.json", {})
-
-
-def save_settings(settings: Dict) -> None:
-    _save_json("settings.json", settings)
-
-
 # --- Bundle ---
 
 
@@ -79,7 +68,6 @@ def load_local_bundle() -> Dict:
         "skills": load_skills(),
         "mcp_servers": load_mcp_servers(),
         "memory": load_memory(),
-        "settings": load_settings(),
     }
 
 

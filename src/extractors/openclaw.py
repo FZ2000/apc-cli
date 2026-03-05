@@ -3,13 +3,12 @@
 import hashlib
 import json
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from extractors.base import BaseExtractor
 from frontmatter_parser import parse_frontmatter
 
 OPENCLAW_DIR = Path.home() / ".openclaw"
-OPENCLAW_CONFIG = OPENCLAW_DIR / "openclaw.json"
 OPENCLAW_SKILLS_DIR = OPENCLAW_DIR / "skills"
 OPENCLAW_WORKSPACE = OPENCLAW_DIR / "workspace"
 OPENCLAW_USER_MD = OPENCLAW_WORKSPACE / "USER.md"
@@ -101,22 +100,3 @@ class OpenClawExtractor(BaseExtractor):
                 continue
         return entries
 
-    def extract_settings(self) -> Optional[Dict]:
-        if not OPENCLAW_CONFIG.exists():
-            return None
-        try:
-            raw = json.loads(OPENCLAW_CONFIG.read_text(encoding="utf-8"))
-            # Strip sensitive and machine-specific fields before syncing
-            safe = {
-                k: v
-                for k, v in raw.items()
-                if k not in ("meta", "wizard", "gateway", "credentials", "auth")
-            }
-            return {
-                "openclaw": {
-                    "raw_json": safe,
-                    "source_path": str(OPENCLAW_CONFIG),
-                }
-            }
-        except (json.JSONDecodeError, IOError):
-            return None

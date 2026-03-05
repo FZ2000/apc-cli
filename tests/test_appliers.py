@@ -107,61 +107,6 @@ class TestClaudeApplier(unittest.TestCase):
         self.assertIn("existing-server", data["mcpServers"])
         self.assertIn("new-server", data["mcpServers"])
 
-    def test_apply_memory_legacy(self):
-        """Legacy apply_memory still works for fallback."""
-        entries = [
-            {"category": "preference", "content": "Prefers TypeScript"},
-            {"category": "workflow", "content": "Runs tests first"},
-            {"category": "constraint", "content": "Never use eval"},
-        ]
-        manifest = self._manifest()
-
-        with (
-            patch("appliers.claude.CLAUDE_MD", self.claude_md),
-            patch("appliers.claude.CLAUDE_DIR", self.claude_dir),
-        ):
-            from appliers.claude import ClaudeApplier
-
-            applier = ClaudeApplier()
-            count = applier.apply_memory(entries, manifest)
-
-        self.assertEqual(count, 3)
-        content = self.claude_md.read_text()
-        self.assertIn("Prefers TypeScript", content)
-        self.assertIn("Runs tests first", content)
-        self.assertIn("## Preferences", content)
-        self.assertIn("## Workflow", content)
-
-    def test_apply_memory_preserves_user_content(self):
-        """Memory sync should not destroy user-written content."""
-        # User has their own notes in CLAUDE.md
-        self.claude_md.write_text(
-            "# My Custom Instructions\n\nDo not touch this.\n", encoding="utf-8"
-        )
-
-        entries = [
-            {"category": "preference", "content": "Prefers TypeScript"},
-        ]
-        manifest = self._manifest()
-
-        with (
-            patch("appliers.claude.CLAUDE_MD", self.claude_md),
-            patch("appliers.claude.CLAUDE_DIR", self.claude_dir),
-        ):
-            from appliers.claude import ClaudeApplier
-
-            applier = ClaudeApplier()
-            applier.apply_memory(entries, manifest)
-
-        content = self.claude_md.read_text()
-        # User content preserved
-        self.assertIn("# My Custom Instructions", content)
-        self.assertIn("Do not touch this.", content)
-        # APC content added
-        self.assertIn("Prefers TypeScript", content)
-        self.assertIn(BEGIN_MARKER, content)
-        self.assertIn(END_MARKER, content)
-
     def test_apply_memory_via_llm(self):
         """LLM-based memory sync writes files from LLM response."""
         collected = [
@@ -249,9 +194,23 @@ class TestClaudeApplier(unittest.TestCase):
 
     def test_apply_memory_via_llm_no_schema_returns_zero(self):
         """Appliers without MEMORY_SCHEMA should return 0."""
-        from appliers.cursor import CursorApplier
+        from appliers.base import BaseApplier
+        from appliers.manifest import ToolManifest as TM
 
-        applier = CursorApplier()
+        class NoSchemaApplier(BaseApplier):
+            TOOL_NAME = "noop"
+            MEMORY_SCHEMA = ""
+
+            def apply_skills(self, skills, manifest):
+                return 0
+
+            def apply_mcp_servers(self, servers, secrets, manifest):
+                return 0
+
+            def apply_settings(self, settings):
+                return False
+
+        applier = NoSchemaApplier()
         manifest = self._manifest()
         collected = [{"id": "abc", "content": "test"}]
 

@@ -97,7 +97,7 @@ def sync_skills(tool_list: List[str]) -> Tuple[int, int]:
     return total_copy, total_link
 
 
-def sync_mcp(tool_list: List[str]) -> int:
+def sync_mcp(tool_list: List[str], override: bool = False) -> int:
     """Apply MCP servers from cache to tools. Returns count."""
     mcp_servers = load_mcp_servers()
 
@@ -113,7 +113,7 @@ def sync_mcp(tool_list: List[str]) -> int:
             applier = get_applier(tool_name)
             manifest = applier.get_manifest()
 
-            m = applier.apply_mcp_servers(mcp_servers, {}, manifest)
+            m = applier.apply_mcp_servers(mcp_servers, {}, manifest, override=override)
             # Prune orphaned MCP servers (keep skill names empty — not our concern)
             applier.prune([], current_mcp_names, manifest)
             manifest.save()
@@ -153,13 +153,12 @@ def sync_memory(tool_list: List[str]) -> int:
     return total
 
 
-def sync_all(tool_list: List[str], no_memory: bool = False) -> None:
+def sync_all(tool_list: List[str], no_memory: bool = False, override_mcp: bool = False) -> None:
     """Apply everything (skills + MCP + memory). Used by `apc sync`."""
     bundle = load_local_bundle()
     collected_skills = bundle["skills"]
     mcp_servers = bundle["mcp_servers"]
     memory_entries = bundle["memory"] if not no_memory else []
-    settings = bundle["settings"]
 
     skills_dir = get_skills_dir()
     installed_skills = _discover_installed_skills()
@@ -187,16 +186,12 @@ def sync_all(tool_list: List[str], no_memory: bool = False) -> None:
             lk = applier.link_skills(installed_skills, skills_dir, manifest)
 
             # MCP servers
-            m = applier.apply_mcp_servers(mcp_servers, {}, manifest)
+            m = applier.apply_mcp_servers(mcp_servers, {}, manifest, override=override_mcp)
 
             # Memory
             mem = 0
             if memory_entries:
                 mem = applier.apply_memory_via_llm(memory_entries, manifest)
-
-            # Settings
-            settings_data = settings.get("tool_settings", {}) if isinstance(settings, dict) else {}
-            applier.apply_settings(settings_data)
 
             # Prune orphans
             applier.prune(all_skill_names, current_mcp_names, manifest)
