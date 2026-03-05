@@ -489,15 +489,15 @@ class TestSubSync:
 
 class TestModels:
     def test_models_status_exits_zero(self, runner, cli):
-        result = runner.invoke(cli, ["models", "status"])
+        result = runner.invoke(cli, ["model", "status"])
         assert result.exit_code == 0, result.output
 
     def test_models_list_exits_zero(self, runner, cli):
-        result = runner.invoke(cli, ["models", "list"])
+        result = runner.invoke(cli, ["model", "list"])
         assert result.exit_code == 0, result.output
 
     def test_models_set(self, runner, cli):
-        result = runner.invoke(cli, ["models", "set", "anthropic/claude-sonnet-4-6"])
+        result = runner.invoke(cli, ["model", "set", "anthropic/claude-sonnet-4-6"])
         assert result.exit_code == 0
         # Verify it wrote to disk
         models_path = HOME / ".apc" / "models.json"
@@ -506,7 +506,7 @@ class TestModels:
         assert data.get("default") == "anthropic/claude-sonnet-4-6"
 
     def test_models_set_invalid_format(self, runner, cli):
-        result = runner.invoke(cli, ["models", "set", "no-slash"])
+        result = runner.invoke(cli, ["model", "set", "no-slash"])
         assert result.exit_code != 0
 
 

@@ -732,7 +732,7 @@ def configure_cmd(
         configure_interactive()
 
 
-@click.group("models")
+@click.group("model")
 def models_cmd():
     """Manage LLM model configuration."""
     pass

@@ -150,11 +150,11 @@ apc configure
 | Command | Description |
 |---------|-------------|
 | `apc configure` | Interactive LLM provider setup wizard |
-| `apc models status` | Show default model and auth profiles |
-| `apc models list` | List configured providers and models |
-| `apc models set <provider/model>` | Set the default model |
-| `apc models auth add` | Add an auth profile |
-| `apc models auth remove <key>` | Remove an auth profile |
+| `apc model status` | Show default model and auth profiles |
+| `apc model list` | List configured providers and models |
+| `apc model set <provider/model>` | Set the default model |
+| `apc model auth add` | Add an auth profile |
+| `apc model auth remove <key>` | Remove an auth profile |
 
 ## How It Works
 
