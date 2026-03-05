@@ -114,7 +114,7 @@ def decrypt_value(token: str, private_key_str: str) -> Optional[str]:
         return token  # not encrypted, pass through
 
     try:
-        raw_b64 = token[len(AGE_PREFIX):]
+        raw_b64 = token[len(AGE_PREFIX) :]
         ciphertext = base64.b64decode(raw_b64)
         identity = x25519.Identity.from_str(private_key_str)
         plaintext = decrypt(ciphertext, [identity])
@@ -132,9 +132,7 @@ def is_encrypted(value: str) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def _export_mcp_servers(
-    servers: List[Dict], public_key: Optional[str]
-) -> List[Dict]:
+def _export_mcp_servers(servers: List[Dict], public_key: Optional[str]) -> List[Dict]:
     """Prepare MCP servers for export: encrypt secret values if key provided."""
     result = []
     for srv in servers:
@@ -154,9 +152,7 @@ def _export_mcp_servers(
     return result
 
 
-def _export_auth_profiles(
-    data: Dict[str, Any], public_key: Optional[str]
-) -> Dict[str, Any]:
+def _export_auth_profiles(data: Dict[str, Any], public_key: Optional[str]) -> Dict[str, Any]:
     """Encrypt key/token fields in auth profiles."""
     out = json.loads(json.dumps(data))  # deep copy
     for _pkey, profile in out.get("profiles", {}).items():
@@ -189,16 +185,12 @@ def _import_mcp_servers(
                 else:
                     warning(f"Failed to decrypt secret '{key}' for MCP server '{srv.get('name')}'")
         elif enc and not private_key:
-            warning(
-                f"Skipping encrypted secrets for '{srv.get('name')}' — no private key"
-            )
+            warning(f"Skipping encrypted secrets for '{srv.get('name')}' — no private key")
         result.append(out)
     return result, secrets_to_store
 
 
-def _import_auth_profiles(
-    data: Dict[str, Any], private_key: Optional[str]
-) -> Dict[str, Any]:
+def _import_auth_profiles(data: Dict[str, Any], private_key: Optional[str]) -> Dict[str, Any]:
     """Decrypt key/token fields in auth profiles."""
     out = json.loads(json.dumps(data))  # deep copy
     for _pkey, profile in out.get("profiles", {}).items():
@@ -260,8 +252,7 @@ def export_cmd(path: str, no_secrets: bool, yes: bool):
     installed_skills: List[str] = []
     if skills_dir.exists():
         installed_skills = [
-            d.name for d in sorted(skills_dir.iterdir())
-            if d.is_dir() and (d / "SKILL.md").exists()
+            d.name for d in sorted(skills_dir.iterdir()) if d.is_dir() and (d / "SKILL.md").exists()
         ]
     if installed_skills:
         info(f"Installed skills to copy: {len(installed_skills)}")
@@ -299,9 +290,7 @@ def export_cmd(path: str, no_secrets: bool, yes: bool):
     (export_dir / "config").mkdir(exist_ok=True)
 
     # 1. Cache: skills.json (plain)
-    (export_dir / "cache" / "skills.json").write_text(
-        json.dumps(skills, indent=2, default=str)
-    )
+    (export_dir / "cache" / "skills.json").write_text(json.dumps(skills, indent=2, default=str))
 
     # 2. Cache: mcp_servers.json (with encrypted secrets)
     exported_mcp = _export_mcp_servers(mcp_servers, public_key)
@@ -310,9 +299,7 @@ def export_cmd(path: str, no_secrets: bool, yes: bool):
     )
 
     # 3. Cache: memory.json (plain)
-    (export_dir / "cache" / "memory.json").write_text(
-        json.dumps(memory, indent=2, default=str)
-    )
+    (export_dir / "cache" / "memory.json").write_text(json.dumps(memory, indent=2, default=str))
 
     # 4. Installed skills directory (resolve symlinks)
     if installed_skills:
@@ -393,9 +380,7 @@ def import_cmd(path: str, no_secrets: bool, yes: bool):
     metadata = json.loads(meta_path.read_text())
     schema = metadata.get("schema_version", 0)
     if schema > SCHEMA_VERSION:
-        error(
-            f"Export schema version {schema} is newer than supported ({SCHEMA_VERSION})."
-        )
+        error(f"Export schema version {schema} is newer than supported ({SCHEMA_VERSION}).")
         error("Please upgrade APC: pip install --upgrade apc")
         raise SystemExit(1)
 
@@ -408,9 +393,7 @@ def import_cmd(path: str, no_secrets: bool, yes: bool):
             private_key = _load_identity()
             if not private_key:
                 warning("Age private key not found at ~/.apc/age-identity.txt")
-                warning(
-                    "Transfer it from the source machine to decrypt secrets."
-                )
+                warning("Transfer it from the source machine to decrypt secrets.")
                 warning("Continuing without secret decryption.")
         else:
             warning("pyrage not installed — cannot decrypt secrets.")

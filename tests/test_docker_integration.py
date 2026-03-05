@@ -802,9 +802,7 @@ class TestExportImportRoundTrip:
     def _ensure_collected(self, runner, cli):
         runner.invoke(cli, ["collect", "--yes"])
         # Add a manual memory entry to test persistence
-        runner.invoke(
-            cli, ["memory", "add", "Round-trip test memory", "--category", "preference"]
-        )
+        runner.invoke(cli, ["memory", "add", "Round-trip test memory", "--category", "preference"])
 
     @pytest.fixture
     def export_path(self, tmp_path):
@@ -868,8 +866,14 @@ class TestExportImportRoundTrip:
         # Set up auth
         runner.invoke(
             cli,
-            ["configure", "--provider", "anthropic",
-             "--api-key", "sk-roundtrip", "--non-interactive"],
+            [
+                "configure",
+                "--provider",
+                "anthropic",
+                "--api-key",
+                "sk-roundtrip",
+                "--non-interactive",
+            ],
         )
 
         r = runner.invoke(cli, ["export", str(export_path), "--yes"])
