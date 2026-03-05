@@ -570,294 +570,234 @@ class TestConfigure:
 # ---------------------------------------------------------------------------
 
 
-class TestInstall:
-    """Tests for apc install — repo-first GitHub skill installation."""
+# ---------------------------------------------------------------------------
+# Phase 11: apc install (real GitHub network calls, no mocks)
+# ---------------------------------------------------------------------------
 
-    def test_install_invalid_repo_format(self, runner, cli):
-        """Non-slug repos are rejected with a clear error."""
-        result = runner.invoke(cli, ["install", "https://github.com/owner/repo"])
+
+class TestInstall:
+    """Real-command tests for apc install.
+
+    Uses anthropics/skills as the test repo — a stable public repo with known skills.
+    All commands invoke the real GitHub API and write real files.
+    """
+
+    TEST_REPO = "anthropics/skills"
+    KNOWN_SKILL = "pdf"  # small, stable skill
+
+    def test_install_invalid_repo_url(self, runner, cli):
+        """Full GitHub URLs are rejected — must be owner/repo slug."""
+        result = runner.invoke(cli, ["install", "https://github.com/anthropics/skills"])
         assert result.exit_code != 0
-        assert "owner/repo slug" in result.output.lower() or "usage error" in result.output.lower()
+        assert "owner/repo slug" in result.output.lower()
 
     def test_install_invalid_no_slash(self, runner, cli):
-        """Repo without a slash is rejected."""
+        """A bare name with no slash is rejected immediately."""
         result = runner.invoke(cli, ["install", "notaslug"])
         assert result.exit_code != 0
 
-    def test_install_list_mocked(self, runner, cli, monkeypatch):
-        """--list prints available skills from the repo."""
-        from unittest.mock import patch
-
-        mock_skills = ["frontend-design", "skill-creator", "pdf"]
-
-        with patch("install.list_skills_in_repo", return_value=mock_skills):
-            result = runner.invoke(cli, ["install", "owner/repo", "--list"])
-
+    def test_install_list_real_repo(self, runner, cli):
+        """--list fetches and prints the real skill index from GitHub."""
+        result = runner.invoke(cli, ["install", self.TEST_REPO, "--list"])
         assert result.exit_code == 0
-        assert "frontend-design" in result.output
-        assert "skill-creator" in result.output
-        assert "pdf" in result.output
-        assert "3 skill(s) found" in result.output
+        assert "•" in result.output
+        assert "skill(s) found" in result.output
+        assert self.KNOWN_SKILL in result.output
 
-    def test_install_list_empty_repo(self, runner, cli):
-        """--list on a repo with no skills prints an error."""
-        from unittest.mock import patch
-
-        with patch("install.list_skills_in_repo", return_value=[]):
-            result = runner.invoke(cli, ["install", "owner/repo", "--list"])
-
-        assert "no skills found" in result.output.lower()
-
-    def test_install_single_skill_mocked(self, runner, cli, monkeypatch):
-        """Installing a single skill fetches, saves to cache, and applies to agents."""
-        from unittest.mock import patch
-
-        mock_skill = {
-            "name": "frontend-design",
-            "description": "Frontend design skill",
-            "body": "Frontend skill body.",
-            "tags": ["design"],
-            "targets": [],
-            "version": "1.0.0",
-            "source_tool": "github",
-            "source_repo": "owner/repo",
-            "_raw_content": "---\nname: frontend-design\n---\nFrontend skill body.",
-        }
-
-        with (
-            patch("install.fetch_skill_from_repo", return_value=mock_skill),
-            patch("install._apply_skill_to_agents", return_value=1),
-        ):
-            result = runner.invoke(
-                cli,
-                ["install", "owner/repo", "--skill", "frontend-design", "-a", "cursor", "-y"],
-            )
-
-        assert result.exit_code == 0
+    def test_install_single_skill(self, runner, cli, tmp_path, monkeypatch):
+        """Install one real skill — verifies cache entry and SKILL.md on disk."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        result = runner.invoke(
+            cli,
+            ["install", self.TEST_REPO, "--skill", self.KNOWN_SKILL, "-a", "cursor", "-y"],
+        )
+        assert result.exit_code == 0, result.output
         assert "✓" in result.output
-        assert "frontend-design" in result.output
+        skill_file = tmp_path / ".apc" / "skills" / self.KNOWN_SKILL / "SKILL.md"
+        assert skill_file.exists(), "SKILL.md not written to ~/.apc/skills/"
+        assert len(skill_file.read_text()) > 0
 
-    def test_install_skill_not_found(self, runner, cli):
-        """A skill that doesn't exist in the repo prints a clear not-found message."""
-        from unittest.mock import patch
+    def test_install_multiple_skills(self, runner, cli, tmp_path, monkeypatch):
+        """Install two real skills in one command."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        result = runner.invoke(
+            cli,
+            [
+                "install",
+                self.TEST_REPO,
+                "--skill",
+                "pdf",
+                "--skill",
+                "skill-creator",
+                "-a",
+                "cursor",
+                "-y",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert "Installed 2 skill(s)" in result.output
+        assert (tmp_path / ".apc" / "skills" / "pdf" / "SKILL.md").exists()
+        assert (tmp_path / ".apc" / "skills" / "skill-creator" / "SKILL.md").exists()
 
-        with patch("install.fetch_skill_from_repo", return_value=None):
-            result = runner.invoke(
-                cli,
-                ["install", "owner/repo", "--skill", "nonexistent-skill", "-a", "cursor", "-y"],
-            )
-
+    def test_install_nonexistent_skill(self, runner, cli, tmp_path, monkeypatch):
+        """A skill name that does not exist in the repo prints a clear message."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        result = runner.invoke(
+            cli,
+            [
+                "install",
+                self.TEST_REPO,
+                "--skill",
+                "totally-nonexistent-xyz",
+                "-a",
+                "cursor",
+                "-y",
+            ],
+        )
+        assert result.exit_code == 0  # not a crash — graceful message
         assert (
             "not found" in result.output.lower()
             or "no skills were installed" in result.output.lower()
         )
 
-    def test_install_all_mocked(self, runner, cli):
-        """--all fetches and installs every skill in the repo."""
-        from unittest.mock import patch
+    def test_install_all(self, runner, cli, tmp_path, monkeypatch):
+        """--all installs every skill from the repo."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        result = runner.invoke(cli, ["install", self.TEST_REPO, "--all", "-a", "cursor", "-y"])
+        assert result.exit_code == 0, result.output
+        assert "✓" in result.output
+        skills_dir = tmp_path / ".apc" / "skills"
+        installed = list(skills_dir.iterdir())
+        assert len(installed) > 5, f"Expected >5 skills installed, got {len(installed)}"
 
-        skill_names = ["skill-a", "skill-b"]
-
-        def fake_fetch(repo, name, branch="main"):
-            return {
-                "name": name,
-                "description": "",
-                "body": f"{name} body",
-                "tags": [],
-                "targets": [],
-                "version": "1.0.0",
-                "source_tool": "github",
-                "source_repo": repo,
-                "_raw_content": f"---\nname: {name}\n---\n{name} body",
-            }
-
-        with (
-            patch("install.list_skills_in_repo", return_value=skill_names),
-            patch("install.fetch_skill_from_repo", side_effect=fake_fetch),
-            patch("install._apply_skill_to_agents", return_value=1),
-        ):
-            result = runner.invoke(cli, ["install", "owner/repo", "--all", "-a", "cursor", "-y"])
-
-        assert result.exit_code == 0
-        assert "2 skill(s)" in result.output
-
-    def test_install_yes_flag_skips_confirmation(self, runner, cli):
-        """The -y flag proceeds without interactive prompts."""
-        from unittest.mock import patch
-
-        mock_skill = {
-            "name": "test-skill",
-            "description": "",
-            "body": "body",
-            "tags": [],
-            "targets": [],
-            "version": "1.0.0",
-            "source_tool": "github",
-            "source_repo": "owner/repo",
-            "_raw_content": "---\nname: test-skill\n---\nbody",
-        }
-
-        with (
-            patch("install.fetch_skill_from_repo", return_value=mock_skill),
-            patch("install._apply_skill_to_agents", return_value=1),
-        ):
-            result = runner.invoke(
-                cli, ["install", "owner/repo", "-s", "test-skill", "-a", "cursor", "-y"]
-            )
-
-        # Should complete without asking any questions
+    def test_install_yes_skips_confirmation(self, runner, cli, tmp_path, monkeypatch):
+        """-y completes without showing a Proceed? prompt."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        result = runner.invoke(
+            cli,
+            ["install", self.TEST_REPO, "--skill", self.KNOWN_SKILL, "-a", "cursor", "-y"],
+        )
         assert result.exit_code == 0
         assert "Proceed?" not in result.output
 
+    def test_install_target_all_agents(self, runner, cli, tmp_path, monkeypatch):
+        """--agent '*' installs to all detected tools."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        (tmp_path / ".cursor").mkdir()  # seed so cursor is detectable
+        result = runner.invoke(
+            cli,
+            ["install", self.TEST_REPO, "--skill", self.KNOWN_SKILL, "--agent", "*", "-y"],
+        )
+        assert result.exit_code == 0, result.output
+        assert "✓" in result.output
+
 
 # ---------------------------------------------------------------------------
-# Phase 12: install → sync flow
+# Phase 12: install → sync end-to-end flow (no mocks)
 # ---------------------------------------------------------------------------
 
 
 class TestInstallThenSync:
-    """Verify the full install → sync flow: skills fetched via apc install
-    are correctly picked up and applied when apc sync runs afterwards."""
+    """Real end-to-end install → sync flow.
 
-    def test_install_then_sync_writes_skill_to_tool(self, runner, cli, tmp_path, monkeypatch):
-        """Skills installed via apc install are applied to the target tool on sync."""
-        from unittest.mock import patch
+    Installs real skills from GitHub, runs apc sync, and verifies the
+    resulting file-system state in the target tool's directory.
+    """
 
+    TEST_REPO = "anthropics/skills"
+    KNOWN_SKILL = "pdf"
+
+    def test_install_then_sync_symlinks_skill_to_tool(self, runner, cli, tmp_path, monkeypatch):
+        """Skill installed via apc install is symlinked into tool dir after apc sync."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        (tmp_path / ".cursor").mkdir()
+        (tmp_path / ".cursor" / "mcp.json").write_text("{}")
+
+        r1 = runner.invoke(
+            cli, ["install", self.TEST_REPO, "--skill", self.KNOWN_SKILL, "-a", "cursor", "-y"]
+        )
+        assert r1.exit_code == 0, r1.output
+
+        r2 = runner.invoke(cli, ["sync", "--tools", "cursor", "--yes"])
+        assert r2.exit_code == 0, r2.output
+
+        cursor_skill = tmp_path / ".cursor" / "rules" / f"{self.KNOWN_SKILL}.mdc"
+        assert cursor_skill.exists(), f"Skill not found at {cursor_skill} after sync"
+
+    def test_installed_skill_appears_in_skill_list(self, runner, cli, tmp_path, monkeypatch):
+        """Installed skill appears in apc skill list immediately after install."""
         monkeypatch.setenv("HOME", str(tmp_path))
 
-        mock_skill = {
-            "name": "test-install-skill",
-            "description": "Installed via apc install",
-            "body": "Test install skill body.",
-            "tags": ["test"],
-            "targets": [],
-            "version": "1.0.0",
-            "source_tool": "github",
-            "source_repo": "owner/repo",
-            "_raw_content": (
-                "---\nname: test-install-skill\n"
-                "description: Installed via apc install\n---\n"
-                "Test install skill body."
-            ),
-        }
-
-        # Step 1: apc install
-        with (
-            patch("install.fetch_skill_from_repo", return_value=mock_skill),
-            patch("install._apply_skill_to_agents", return_value=1),
-        ):
-            install_result = runner.invoke(
-                cli,
-                ["install", "owner/repo", "--skill", "test-install-skill", "-a", "cursor", "-y"],
-            )
-        assert install_result.exit_code == 0
-        assert "✓" in install_result.output
-
-        # Skill should now be in the local cache
-        from cache import load_skills
-
-        cached = load_skills()
-        names = [s["name"] for s in cached]
-        assert "test-install-skill" in names
-
-    def test_install_creates_skill_source_file(self, runner, cli, tmp_path, monkeypatch):
-        """apc install saves SKILL.md to ~/.apc/skills/<name>/SKILL.md."""
-        monkeypatch.setenv("HOME", str(tmp_path))
-        from unittest.mock import patch
-
-        raw = "---\nname: my-skill\nversion: 1.0.0\n---\nMy skill body."
-        mock_skill = {
-            "name": "my-skill",
-            "description": "",
-            "body": "My skill body.",
-            "tags": [],
-            "targets": [],
-            "version": "1.0.0",
-            "source_tool": "github",
-            "source_repo": "owner/repo",
-            "_raw_content": raw,
-        }
-
-        with (
-            patch("install.fetch_skill_from_repo", return_value=mock_skill),
-            patch("install._apply_skill_to_agents", return_value=1),
-        ):
-            result = runner.invoke(
-                cli, ["install", "owner/repo", "-s", "my-skill", "-a", "cursor", "-y"]
-            )
-
-        assert result.exit_code == 0
-        skill_file = tmp_path / ".apc" / "skills" / "my-skill" / "SKILL.md"
-        assert skill_file.exists(), f"SKILL.md not found at {skill_file}"
-        assert "My skill body." in skill_file.read_text()
-
-    def test_sync_picks_up_installed_skills(self, runner, cli, tmp_path, monkeypatch):
-        """apc sync --dry-run reports installed skills (from ~/.apc/skills/) correctly."""
-        monkeypatch.setenv("HOME", str(tmp_path))
-
-        # Seed a skill directly into ~/.apc/skills/
-        skill_dir = tmp_path / ".apc" / "skills" / "seeded-skill"
-        skill_dir.mkdir(parents=True)
-        (skill_dir / "SKILL.md").write_text(
-            "---\nname: seeded-skill\ndescription: Seeded for sync test\n---\nBody."
+        runner.invoke(
+            cli, ["install", self.TEST_REPO, "--skill", self.KNOWN_SKILL, "-a", "cursor", "-y"]
         )
 
-        # Seed a target tool so sync has somewhere to go
-        cursor_dir = tmp_path / ".cursor"
-        cursor_dir.mkdir()
-        (cursor_dir / "mcp.json").write_text("{}")
-
-        result = runner.invoke(cli, ["sync", "--tools", "cursor", "--dry-run"])
+        result = runner.invoke(cli, ["skill", "list"])
         assert result.exit_code == 0
-        # dry-run should report the seeded skill in the plan
-        assert "seeded-skill" in result.output or "1" in result.output
+        assert self.KNOWN_SKILL in result.output
 
-    def test_install_multiple_then_sync_all(self, runner, cli, tmp_path, monkeypatch):
-        """Installing multiple skills then syncing --all applies all of them."""
+    def test_install_multiple_then_sync_all_land_in_tool(self, runner, cli, tmp_path, monkeypatch):
+        """All installed skills land in the tool directory after sync."""
         monkeypatch.setenv("HOME", str(tmp_path))
-        from unittest.mock import patch
+        (tmp_path / ".cursor").mkdir()
+        (tmp_path / ".cursor" / "mcp.json").write_text("{}")
 
-        skill_names = ["skill-one", "skill-two"]
+        skills = ["pdf", "skill-creator"]
+        r_install = runner.invoke(
+            cli,
+            [
+                "install",
+                self.TEST_REPO,
+                "--skill",
+                skills[0],
+                "--skill",
+                skills[1],
+                "-a",
+                "cursor",
+                "-y",
+            ],
+        )
+        assert r_install.exit_code == 0, r_install.output
+        assert "Installed 2 skill(s)" in r_install.output
 
-        def fake_fetch(repo, name, branch="main"):
-            return {
-                "name": name,
-                "description": "",
-                "body": f"{name} body",
-                "tags": [],
-                "targets": [],
-                "version": "1.0.0",
-                "source_tool": "github",
-                "source_repo": repo,
-                "_raw_content": f"---\nname: {name}\n---\n{name} body",
-            }
+        r_sync = runner.invoke(cli, ["sync", "--tools", "cursor", "--yes"])
+        assert r_sync.exit_code == 0, r_sync.output
 
-        # Install both skills
-        with (
-            patch("install.fetch_skill_from_repo", side_effect=fake_fetch),
-            patch("install._apply_skill_to_agents", return_value=1),
-        ):
-            for name in skill_names:
-                result = runner.invoke(
-                    cli, ["install", "owner/repo", "-s", name, "-a", "cursor", "-y"]
-                )
-                assert result.exit_code == 0
+        rules_dir = tmp_path / ".cursor" / "rules"
+        for name in skills:
+            assert (rules_dir / f"{name}.mdc").exists(), (
+                f"Skill {name} missing from cursor after sync"
+            )
 
-        # Both should be in ~/.apc/skills/
-        for name in skill_names:
-            skill_file = tmp_path / ".apc" / "skills" / name / "SKILL.md"
-            assert skill_file.exists(), f"Missing {skill_file}"
+    def test_install_all_then_sync_dry_run(self, runner, cli, tmp_path, monkeypatch):
+        """Install all skills then dry-run sync — no files written but plan is shown."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        (tmp_path / ".cursor").mkdir()
+        (tmp_path / ".cursor" / "mcp.json").write_text("{}")
 
-        # Both should appear in skill list
-        list_result = runner.invoke(cli, ["skill", "list"])
-        assert list_result.exit_code == 0
-        assert "skill-one" in list_result.output
-        assert "skill-two" in list_result.output
+        runner.invoke(cli, ["install", self.TEST_REPO, "--all", "-a", "cursor", "-y"])
 
+        installed_count = len(list((tmp_path / ".apc" / "skills").iterdir()))
+        assert installed_count > 5
 
-# ---------------------------------------------------------------------------
-# Phase 13: Full round-trip — collect → sync → verify files
-# ---------------------------------------------------------------------------
+        r_sync = runner.invoke(cli, ["sync", "--tools", "cursor", "--dry-run"])
+        assert r_sync.exit_code == 0
+        assert "No files written" in r_sync.output or "dry-run" in r_sync.output.lower()
+
+    def test_status_synced_after_install_and_sync(self, runner, cli, tmp_path, monkeypatch):
+        """apc status shows cursor as synced after a full install + sync cycle."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        (tmp_path / ".cursor").mkdir()
+        (tmp_path / ".cursor" / "mcp.json").write_text("{}")
+
+        runner.invoke(
+            cli, ["install", self.TEST_REPO, "--skill", self.KNOWN_SKILL, "-a", "cursor", "-y"]
+        )
+        runner.invoke(cli, ["sync", "--tools", "cursor", "--yes"])
+
+        r_status = runner.invoke(cli, ["status"])
+        assert r_status.exit_code == 0
+        assert "synced" in r_status.output.lower()
 
 
 class TestRoundTrip:

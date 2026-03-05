@@ -333,7 +333,7 @@ class TestCursorApplier(unittest.TestCase):
         ]
         manifest = self._manifest()
 
-        with patch("appliers.cursor.CURSOR_RULES_DIR", self.rules_dir):
+        with patch("appliers.cursor._cursor_rules_dir", return_value=self.rules_dir):
             from appliers.cursor import CursorApplier
 
             applier = CursorApplier()
@@ -357,7 +357,7 @@ class TestCursorApplier(unittest.TestCase):
         ]
         manifest = self._manifest()
 
-        with patch("appliers.cursor.CURSOR_MCP_JSON", self.mcp_json):
+        with patch("appliers.cursor._cursor_mcp_json", return_value=self.mcp_json):
             from appliers.cursor import CursorApplier
 
             applier = CursorApplier()

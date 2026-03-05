@@ -9,10 +9,6 @@ from appliers.base import BaseApplier
 from appliers.manifest import ToolManifest
 from frontmatter_parser import render_frontmatter
 
-CURSOR_DIR = Path.home() / ".cursor"
-CURSOR_RULES_DIR = Path(".cursor") / "rules"
-CURSOR_MCP_JSON = CURSOR_DIR / "mcp.json"
-
 CURSOR_MEMORY_SCHEMA = """
 Cursor uses Project Rules in .cursor/rules/ to provide persistent context to its AI.
 Rules are markdown files (.md or .mdc). Files with .mdc extension support YAML frontmatter.
@@ -65,17 +61,30 @@ the same rule file when they cover the same topic.
 """
 
 
+def _cursor_dir() -> Path:
+    return Path.home() / ".cursor"
+
+
+def _cursor_rules_dir() -> Path:
+    return Path.home() / ".cursor" / "rules"
+
+
+def _cursor_mcp_json() -> Path:
+    return Path.home() / ".cursor" / "mcp.json"
+
+
 class CursorApplier(BaseApplier):
-    SKILL_DIR = CURSOR_RULES_DIR
     TOOL_NAME = "cursor"
     MEMORY_SCHEMA = CURSOR_MEMORY_SCHEMA
 
+    @property
+    def SKILL_DIR(self) -> Path:  # type: ignore[override]
+        return _cursor_rules_dir()
+
     def link_skills(self, skills: List[Dict], source_dir: Path, manifest: ToolManifest) -> int:
         """Cursor uses flat .mdc files, so symlink SKILL.md as <name>.mdc."""
-        if self.SKILL_DIR is None:
-            return 0
-
-        self.SKILL_DIR.mkdir(parents=True, exist_ok=True)
+        rules_dir = _cursor_rules_dir()
+        rules_dir.mkdir(parents=True, exist_ok=True)
         count = 0
 
         for skill in skills:
@@ -84,7 +93,7 @@ class CursorApplier(BaseApplier):
             if not source.exists():
                 continue
 
-            link_path = self.SKILL_DIR / f"{name}.mdc"
+            link_path = rules_dir / f"{name}.mdc"
 
             if link_path.is_symlink() or link_path.exists():
                 link_path.unlink()
@@ -100,7 +109,8 @@ class CursorApplier(BaseApplier):
         return count
 
     def apply_skills(self, skills: List[Dict], manifest: ToolManifest) -> int:
-        CURSOR_RULES_DIR.mkdir(parents=True, exist_ok=True)
+        rules_dir = _cursor_rules_dir()
+        rules_dir.mkdir(parents=True, exist_ok=True)
         count = 0
         for skill in skills:
             name = skill.get("name", "unnamed")
@@ -111,7 +121,7 @@ class CursorApplier(BaseApplier):
                 metadata["tags"] = skill["tags"]
 
             content = render_frontmatter(metadata, skill.get("body", ""))
-            path = CURSOR_RULES_DIR / f"{name}.mdc"
+            path = rules_dir / f"{name}.mdc"
             path.write_text(content, encoding="utf-8")
             manifest.record_skill(name, file_path=str(path.resolve()), content=content)
             count += 1
@@ -124,9 +134,10 @@ class CursorApplier(BaseApplier):
         manifest: ToolManifest,
         override: bool = False,
     ) -> int:
-        if CURSOR_MCP_JSON.exists():
+        mcp_json = _cursor_mcp_json()
+        if mcp_json.exists():
             try:
-                data = json.loads(CURSOR_MCP_JSON.read_text(encoding="utf-8"))
+                data = json.loads(mcp_json.read_text(encoding="utf-8"))
             except json.JSONDecodeError:
                 data = {}
         else:
@@ -136,8 +147,6 @@ class CursorApplier(BaseApplier):
             mcp_servers = {}
         else:
             mcp_servers = data.get("mcpServers", {})
-
-            # Prune orphaned MCP servers
             if not manifest.is_first_sync:
                 current_names = {s.get("name", "unnamed") for s in servers}
                 for orphan in set(manifest.managed_mcp_names()) - current_names:
@@ -147,7 +156,6 @@ class CursorApplier(BaseApplier):
         count = 0
         for server in servers:
             name = server.get("name", "unnamed")
-
             env = server.get("env", {}).copy()
             for key, value in env.items():
                 if isinstance(value, str) and value.startswith("${") and value.endswith("}"):
@@ -166,15 +174,15 @@ class CursorApplier(BaseApplier):
             count += 1
 
         data["mcpServers"] = mcp_servers
-        CURSOR_MCP_JSON.parent.mkdir(parents=True, exist_ok=True)
-        CURSOR_MCP_JSON.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        mcp_json.parent.mkdir(parents=True, exist_ok=True)
+        mcp_json.write_text(json.dumps(data, indent=2), encoding="utf-8")
         return count
 
     def _read_existing_memory_files(self) -> Dict[str, str]:
-        """Return {file_path: content} for Cursor's rule files."""
         result = {}
-        if CURSOR_RULES_DIR.exists():
-            for path in CURSOR_RULES_DIR.rglob("*.md*"):
+        rules_dir = _cursor_rules_dir()
+        if rules_dir.exists():
+            for path in rules_dir.rglob("*.md*"):
                 if path.is_file():
                     try:
                         result[str(path)] = path.read_text(encoding="utf-8")
