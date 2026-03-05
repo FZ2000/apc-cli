@@ -58,10 +58,10 @@ Claude Code, Cursor, Gemini CLI, GitHub Copilot, Windsurf, and OpenClaw.
 pip install git+https://github.com/FZ2000/apc-cli.git
 ```
 
-### One-liner (requires [GitHub CLI](https://cli.github.com/))
+### One-liner
 
 ```bash
-bash <(gh api repos/FZ2000/apc-cli/contents/install.sh --jq '.content' | base64 -d)
+curl -fsSL https://raw.githubusercontent.com/FZ2000/apc-cli/main/install.sh | bash
 ```
 
 This clones the repo to `~/.apc-cli`, creates a venv, and symlinks `apc` into `~/.local/bin`.
