@@ -7,6 +7,7 @@ from collect import collect
 from llm_config import configure_cmd, models_cmd
 from mcp import mcp
 from memory import memory
+from share import install
 from skill import skill
 from status import status
 from sync_helpers import count_installed_skills, resolve_target_tools, sync_all
@@ -51,6 +52,9 @@ cli.add_command(skill)
 # Memory
 cli.add_command(memory)
 
+
+# Install
+cli.add_command(install)
 
 # MCP
 cli.add_command(mcp)
