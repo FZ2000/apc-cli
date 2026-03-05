@@ -8,6 +8,7 @@ CWD=/app, but also works locally via pytest with HOME override.
 """
 
 import json
+import shutil
 import textwrap
 from pathlib import Path
 
@@ -646,3 +647,257 @@ class TestRoundTrip:
         data = json.loads((HOME / ".apc" / "cache" / "memory.json").read_text())
         contents = [e.get("content", "") for e in data]
         assert "Persist across collect" in contents
+
+
+# ---------------------------------------------------------------------------
+# Phase 13: apc export / apc import
+# ---------------------------------------------------------------------------
+
+
+class TestExport:
+    @pytest.fixture(autouse=True)
+    def _ensure_collected(self, runner, cli):
+        runner.invoke(cli, ["collect", "--yes"])
+
+    @pytest.fixture
+    def export_path(self, tmp_path):
+        return tmp_path / "test-export"
+
+    def test_export_exits_zero(self, runner, cli, export_path):
+        result = runner.invoke(cli, ["export", str(export_path), "--yes"])
+        assert result.exit_code == 0, result.output
+
+    def test_export_creates_metadata(self, runner, cli, export_path):
+        runner.invoke(cli, ["export", str(export_path), "--yes"])
+        meta_path = export_path / "apc-export.json"
+        assert meta_path.exists(), "apc-export.json not created"
+        meta = json.loads(meta_path.read_text())
+        assert meta["schema_version"] == 1
+        assert "created_at" in meta
+        assert "stats" in meta
+
+    def test_export_creates_cache_files(self, runner, cli, export_path):
+        runner.invoke(cli, ["export", str(export_path), "--yes"])
+        assert (export_path / "cache" / "skills.json").exists()
+        assert (export_path / "cache" / "mcp_servers.json").exists()
+        assert (export_path / "cache" / "memory.json").exists()
+
+    def test_export_cache_has_data(self, runner, cli, export_path):
+        runner.invoke(cli, ["export", str(export_path), "--yes"])
+
+        skills = json.loads((export_path / "cache" / "skills.json").read_text())
+        assert len(skills) > 0, "Exported skills.json is empty"
+
+        mcp = json.loads((export_path / "cache" / "mcp_servers.json").read_text())
+        assert len(mcp) > 0, "Exported mcp_servers.json is empty"
+
+        memory = json.loads((export_path / "cache" / "memory.json").read_text())
+        assert len(memory) > 0, "Exported memory.json is empty"
+
+    def test_export_stats_match_cache(self, runner, cli, export_path):
+        runner.invoke(cli, ["export", str(export_path), "--yes"])
+
+        meta = json.loads((export_path / "apc-export.json").read_text())
+        stats = meta["stats"]
+
+        skills = json.loads((export_path / "cache" / "skills.json").read_text())
+        mcp = json.loads((export_path / "cache" / "mcp_servers.json").read_text())
+        memory = json.loads((export_path / "cache" / "memory.json").read_text())
+
+        assert stats["skills"] == len(skills)
+        assert stats["mcp_servers"] == len(mcp)
+        assert stats["memory"] == len(memory)
+
+    def test_export_no_secrets_flag(self, runner, cli, export_path):
+        result = runner.invoke(cli, ["export", str(export_path), "--no-secrets", "--yes"])
+        assert result.exit_code == 0, result.output
+
+        meta = json.loads((export_path / "apc-export.json").read_text())
+        assert meta["public_key"] is None
+
+    def test_export_has_age_public_key(self, runner, cli, export_path):
+        result = runner.invoke(cli, ["export", str(export_path), "--yes"])
+        assert result.exit_code == 0, result.output
+
+        meta = json.loads((export_path / "apc-export.json").read_text())
+        # pyrage should be installed, so public key should be present
+        assert meta["public_key"] is not None
+        assert meta["public_key"].startswith("age1")
+
+    def test_export_creates_age_identity(self, runner, cli, export_path):
+        runner.invoke(cli, ["export", str(export_path), "--yes"])
+        identity_path = HOME / ".apc" / "age-identity.txt"
+        assert identity_path.exists(), "age-identity.txt not created"
+
+    def test_export_idempotent(self, runner, cli, export_path):
+        """Exporting twice to the same path should succeed (overwrite)."""
+        r1 = runner.invoke(cli, ["export", str(export_path), "--yes"])
+        assert r1.exit_code == 0
+        r2 = runner.invoke(cli, ["export", str(export_path), "--yes"])
+        assert r2.exit_code == 0
+
+    def test_export_copies_config_files(self, runner, cli, export_path):
+        """After configure, exported dir should contain config files."""
+        # Set up auth profile and models
+        runner.invoke(
+            cli,
+            ["configure", "--provider", "anthropic", "--api-key", "sk-test", "--non-interactive"],
+        )
+        runner.invoke(cli, ["export", str(export_path), "--yes"])
+
+        assert (export_path / "config" / "models.json").exists()
+        assert (export_path / "config" / "auth-profiles.json").exists()
+
+    def test_export_encrypts_auth_profile_keys(self, runner, cli, export_path):
+        """Auth profile keys should be encrypted in the export."""
+        runner.invoke(
+            cli,
+            ["configure", "--provider", "openai", "--api-key", "sk-real-key", "--non-interactive"],
+        )
+        runner.invoke(cli, ["export", str(export_path), "--yes"])
+
+        auth = json.loads((export_path / "config" / "auth-profiles.json").read_text())
+        profile = auth["profiles"].get("openai:default", {})
+        key_val = profile.get("key", "")
+        assert key_val.startswith("AGE:"), f"Expected encrypted key, got: {key_val[:20]}"
+
+
+class TestImport:
+    @pytest.fixture(autouse=True)
+    def _ensure_collected(self, runner, cli):
+        runner.invoke(cli, ["collect", "--yes"])
+
+    @pytest.fixture
+    def export_path(self, tmp_path):
+        return tmp_path / "test-export"
+
+    def _do_export(self, runner, cli, export_path):
+        result = runner.invoke(cli, ["export", str(export_path), "--yes"])
+        assert result.exit_code == 0, result.output
+
+    def test_import_exits_zero(self, runner, cli, export_path):
+        self._do_export(runner, cli, export_path)
+        result = runner.invoke(cli, ["import", str(export_path), "--yes"])
+        assert result.exit_code == 0, result.output
+
+    def test_import_invalid_path(self, runner, cli, tmp_path):
+        result = runner.invoke(cli, ["import", str(tmp_path / "nonexistent"), "--yes"])
+        assert result.exit_code != 0
+
+    def test_import_suggests_sync(self, runner, cli, export_path):
+        self._do_export(runner, cli, export_path)
+        result = runner.invoke(cli, ["import", str(export_path), "--yes"])
+        assert "apc sync" in result.output
+
+    def test_import_no_secrets_flag(self, runner, cli, export_path):
+        self._do_export(runner, cli, export_path)
+        result = runner.invoke(cli, ["import", str(export_path), "--no-secrets", "--yes"])
+        assert result.exit_code == 0, result.output
+
+
+class TestExportImportRoundTrip:
+    """Full export → wipe → import → verify cycle."""
+
+    @pytest.fixture(autouse=True)
+    def _ensure_collected(self, runner, cli):
+        runner.invoke(cli, ["collect", "--yes"])
+        # Add a manual memory entry to test persistence
+        runner.invoke(
+            cli, ["memory", "add", "Round-trip test memory", "--category", "preference"]
+        )
+
+    @pytest.fixture
+    def export_path(self, tmp_path):
+        return tmp_path / "roundtrip-export"
+
+    def test_round_trip_preserves_skills(self, runner, cli, export_path):
+        """Export, wipe cache, import, verify skills restored."""
+        # Export
+        r = runner.invoke(cli, ["export", str(export_path), "--yes"])
+        assert r.exit_code == 0
+
+        # Record original skills
+        orig = json.loads((HOME / ".apc" / "cache" / "skills.json").read_text())
+        orig_names = sorted(s.get("name") for s in orig)
+
+        # Wipe cache skills
+        (HOME / ".apc" / "cache" / "skills.json").write_text("[]")
+
+        # Import
+        r = runner.invoke(cli, ["import", str(export_path), "--yes"])
+        assert r.exit_code == 0
+
+        # Verify
+        restored = json.loads((HOME / ".apc" / "cache" / "skills.json").read_text())
+        restored_names = sorted(s.get("name") for s in restored)
+        assert restored_names == orig_names
+
+    def test_round_trip_preserves_mcp_servers(self, runner, cli, export_path):
+        """Export, wipe cache, import, verify MCP servers restored."""
+        r = runner.invoke(cli, ["export", str(export_path), "--yes"])
+        assert r.exit_code == 0
+
+        orig = json.loads((HOME / ".apc" / "cache" / "mcp_servers.json").read_text())
+        orig_names = sorted(s.get("name") for s in orig)
+
+        (HOME / ".apc" / "cache" / "mcp_servers.json").write_text("[]")
+
+        r = runner.invoke(cli, ["import", str(export_path), "--yes"])
+        assert r.exit_code == 0
+
+        restored = json.loads((HOME / ".apc" / "cache" / "mcp_servers.json").read_text())
+        restored_names = sorted(s.get("name") for s in restored)
+        assert restored_names == orig_names
+
+    def test_round_trip_preserves_memory(self, runner, cli, export_path):
+        """Export, wipe cache, import, verify memory restored including manual entry."""
+        r = runner.invoke(cli, ["export", str(export_path), "--yes"])
+        assert r.exit_code == 0
+
+        (HOME / ".apc" / "cache" / "memory.json").write_text("[]")
+
+        r = runner.invoke(cli, ["import", str(export_path), "--yes"])
+        assert r.exit_code == 0
+
+        restored = json.loads((HOME / ".apc" / "cache" / "memory.json").read_text())
+        contents = [e.get("content", "") for e in restored]
+        assert "Round-trip test memory" in contents
+
+    def test_round_trip_preserves_config(self, runner, cli, export_path):
+        """Export with auth profile, wipe, import, verify config restored."""
+        # Set up auth
+        runner.invoke(
+            cli,
+            ["configure", "--provider", "anthropic",
+             "--api-key", "sk-roundtrip", "--non-interactive"],
+        )
+
+        r = runner.invoke(cli, ["export", str(export_path), "--yes"])
+        assert r.exit_code == 0
+
+        # Wipe auth profiles
+        auth_path = HOME / ".apc" / "auth-profiles.json"
+        auth_path.write_text(json.dumps({"version": 1, "profiles": {}, "order": {}}))
+
+        r = runner.invoke(cli, ["import", str(export_path), "--yes"])
+        assert r.exit_code == 0
+
+        # Verify auth profile was restored (key should be decrypted)
+        data = json.loads(auth_path.read_text())
+        profile = data.get("profiles", {}).get("anthropic:default", {})
+        assert profile.get("key") == "sk-roundtrip"
+
+    def test_status_after_round_trip(self, runner, cli, export_path):
+        """After export → wipe → import, apc status should still work."""
+        runner.invoke(cli, ["export", str(export_path), "--yes"])
+
+        # Wipe all cache
+        cache_dir = HOME / ".apc" / "cache"
+        if cache_dir.exists():
+            shutil.rmtree(cache_dir)
+            cache_dir.mkdir()
+
+        runner.invoke(cli, ["import", str(export_path), "--yes"])
+
+        r = runner.invoke(cli, ["status"])
+        assert r.exit_code == 0

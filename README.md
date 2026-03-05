@@ -145,6 +145,22 @@ apc configure
 | `apc marketplace add <source>` | Add a GitHub repo or local directory |
 | `apc marketplace delete <source>` | Remove a marketplace source |
 
+### Export / Import
+
+| Command | Description |
+|---------|-------------|
+| `apc export [path]` | Export configs to a portable directory with age-encrypted secrets |
+| `apc import [path]` | Import configs from an export directory, decrypting secrets |
+
+**Options:**
+
+| Flag | Description |
+|------|-------------|
+| `--no-secrets` | Skip secret encryption/decryption |
+| `--yes`, `-y` | Skip confirmation prompts |
+
+**Workflow:** export on machine A, commit the directory to a private repo, pull on machine B, import. Transfer `~/.apc/age-identity.txt` (private key) to the target machine once via a secure channel. Secrets stay safe even if the repo becomes public.
+
 ### LLM Configuration
 
 | Command | Description |
