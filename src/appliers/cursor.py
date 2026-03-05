@@ -181,4 +181,3 @@ class CursorApplier(BaseApplier):
                     except IOError:
                         pass
         return result
-

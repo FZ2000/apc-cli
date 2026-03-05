@@ -155,4 +155,3 @@ class WindsurfApplier(BaseApplier):
                     except IOError:
                         pass
         return result
-

@@ -112,4 +112,3 @@ class ClaudeApplier(BaseApplier):
             except IOError:
                 pass
         return result
-

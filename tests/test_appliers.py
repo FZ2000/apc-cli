@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from appliers.manifest import ToolManifest
-from appliers.memory_section import BEGIN_MARKER, END_MARKER
+from appliers.memory_section import BEGIN_MARKER, END_MARKER  # noqa: F401
 
 
 class TestClaudeApplier(unittest.TestCase):
@@ -195,7 +195,6 @@ class TestClaudeApplier(unittest.TestCase):
     def test_apply_memory_via_llm_no_schema_returns_zero(self):
         """Appliers without MEMORY_SCHEMA should return 0."""
         from appliers.base import BaseApplier
-        from appliers.manifest import ToolManifest as TM
 
         class NoSchemaApplier(BaseApplier):
             TOOL_NAME = "noop"

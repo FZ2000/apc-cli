@@ -1,6 +1,5 @@
 """OpenClaw applier — writes skills, memory, settings."""
 
-import json
 from pathlib import Path
 from typing import Dict, List
 
@@ -81,4 +80,3 @@ class OpenClawApplier(BaseApplier):
                 except IOError:
                     pass
         return result
-

@@ -132,4 +132,3 @@ class GeminiApplier(BaseApplier):
             except IOError:
                 pass
         return result
-

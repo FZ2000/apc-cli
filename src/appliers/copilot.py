@@ -145,9 +145,7 @@ class CopilotApplier(BaseApplier):
         result = {}
         if COPILOT_INSTRUCTIONS.exists():
             try:
-                result[str(COPILOT_INSTRUCTIONS)] = COPILOT_INSTRUCTIONS.read_text(
-                    encoding="utf-8"
-                )
+                result[str(COPILOT_INSTRUCTIONS)] = COPILOT_INSTRUCTIONS.read_text(encoding="utf-8")
             except IOError:
                 pass
         if COPILOT_INSTRUCTIONS_DIR.exists():
@@ -158,4 +156,3 @@ class CopilotApplier(BaseApplier):
                     except IOError:
                         pass
         return result
-

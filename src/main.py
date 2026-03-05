@@ -71,7 +71,9 @@ cli.add_command(models_cmd)
     "--all", "apply_all", is_flag=True, help="Apply to all detected tools without selection"
 )
 @click.option("--no-memory", is_flag=True, help="Skip applying memory entries")
-@click.option("--override-mcp", is_flag=True, help="Replace existing MCP servers instead of merging")
+@click.option(
+    "--override-mcp", is_flag=True, help="Replace existing MCP servers instead of merging"
+)
 @click.option("--dry-run", is_flag=True, help="Show what would be applied without writing")
 @click.option("--yes", "-y", is_flag=True, help="Skip confirmation prompt")
 def sync(tools, apply_all, no_memory, override_mcp, dry_run, yes):

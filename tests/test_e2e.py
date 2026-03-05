@@ -34,7 +34,12 @@ class TestMemoryViaLLM(unittest.TestCase):
         ]
 
         llm_response = json.dumps(
-            [{"file_path": str(claude_md), "content": "## Preferences\n- Prefers TypeScript\n- Uses 2-space indentation\n"}]
+            [
+                {
+                    "file_path": str(claude_md),
+                    "content": "## Preferences\n- Prefers TypeScript\n- Uses 2-space indentation\n",
+                }
+            ]
         )
 
         with (

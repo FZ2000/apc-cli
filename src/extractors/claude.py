@@ -103,4 +103,3 @@ class ClaudeExtractor(BaseExtractor):
             except IOError:
                 continue
         return entries
-

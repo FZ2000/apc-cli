@@ -8,7 +8,6 @@ CWD=/app, but also works locally via pytest with HOME override.
 """
 
 import json
-import os
 import textwrap
 from pathlib import Path
 
@@ -157,9 +156,7 @@ def seed_tool_data():
 
     workspace_dir = HOME / ".openclaw" / "workspace"
     workspace_dir.mkdir(parents=True, exist_ok=True)
-    (workspace_dir / "USER.md").write_text(
-        "# OpenClaw User\nTest user memory for OpenClaw.\n"
-    )
+    (workspace_dir / "USER.md").write_text("# OpenClaw User\nTest user memory for OpenClaw.\n")
 
 
 @pytest.fixture
@@ -436,9 +433,7 @@ class TestSync:
         assert result.exit_code == 0, result.output
 
     def test_sync_writes_cursor_mcp(self, runner, cli):
-        runner.invoke(
-            cli, ["sync", "--tools", "cursor", "--yes", "--no-memory", "--override-mcp"]
-        )
+        runner.invoke(cli, ["sync", "--tools", "cursor", "--yes", "--no-memory", "--override-mcp"])
         data = json.loads((HOME / ".cursor" / "mcp.json").read_text())
         assert "mcpServers" in data
         assert len(data["mcpServers"]) > 0
@@ -643,9 +638,7 @@ class TestRoundTrip:
     def test_memory_add_persists_across_collect(self, runner, cli):
         """Manually added memory should survive a re-collect (merge, not replace)."""
         runner.invoke(cli, ["collect", "--yes"])
-        runner.invoke(
-            cli, ["memory", "add", "Persist across collect", "--category", "preference"]
-        )
+        runner.invoke(cli, ["memory", "add", "Persist across collect", "--category", "preference"])
 
         # Re-collect
         runner.invoke(cli, ["collect", "--yes"])
