@@ -73,8 +73,11 @@ def collect(tools, no_memory, yes):
     # --- Phase 1: Scan ---
     header("Scanning")
 
-    if tools:
-        tool_list = [t.strip() for t in tools.split(",")]
+    if tools is not None:
+        tool_list = [t.strip() for t in tools.split(",") if t.strip()]
+        if not tool_list:
+            error("--tools requires at least one tool name (e.g. --tools claude,cursor)")
+            return
     else:
         tool_list = detect_installed_tools()
 

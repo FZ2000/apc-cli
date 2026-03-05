@@ -31,8 +31,12 @@ def count_installed_skills() -> int:
 
 def resolve_target_tools(tools_flag: Optional[str], apply_all: bool) -> List[str]:
     """Resolve target tools from --tools flag, --all flag, or interactive selection."""
-    if tools_flag:
-        return [t.strip() for t in tools_flag.split(",")]
+    if tools_flag is not None:
+        tool_list = [t.strip() for t in tools_flag.split(",") if t.strip()]
+        if not tool_list:
+            warning("--tools requires at least one tool name (e.g. --tools cursor,gemini)")
+            return []
+        return tool_list
 
     if apply_all:
         tool_list = detect_installed_tools()
