@@ -61,14 +61,24 @@ def _apply_skill_to_agents(skill: dict, agent_list: list) -> int:
 
 @click.command()
 @click.argument("repo")
-@click.option("--skill", "-s", "skills", multiple=True,
-              help="Skill name(s) to install. Use '*' for all.")
+@click.option(
+    "--skill", "-s", "skills", multiple=True, help="Skill name(s) to install. Use '*' for all."
+)
 @click.option("--all", "install_all", is_flag=True, help="Install all skills from the repo.")
-@click.option("--agent", "-a", "agents", multiple=True,
-              help="Target tool(s) to install to. Use '*' for all detected.")
+@click.option(
+    "--agent",
+    "-a",
+    "agents",
+    multiple=True,
+    help="Target tool(s) to install to. Use '*' for all detected.",
+)
 @click.option("--branch", default="main", show_default=True, help="Git branch to fetch from.")
-@click.option("--list", "list_only", is_flag=True,
-              help="List available skills in the repo without installing.")
+@click.option(
+    "--list",
+    "list_only",
+    is_flag=True,
+    help="List available skills in the repo without installing.",
+)
 @click.option("-y", "--yes", is_flag=True, help="Non-interactive: skip all confirmation prompts.")
 def install(repo, skills, install_all, agents, branch, list_only, yes):
     """Install skills from a GitHub repository.

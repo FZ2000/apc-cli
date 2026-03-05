@@ -566,7 +566,152 @@ class TestConfigure:
 
 
 # ---------------------------------------------------------------------------
-# Phase 11: Full round-trip — collect → sync → verify files
+# Phase 11: apc install (GitHub repo-first UX)
+# ---------------------------------------------------------------------------
+
+
+class TestInstall:
+    """Tests for apc install — repo-first GitHub skill installation."""
+
+    def test_install_invalid_repo_format(self, runner, cli):
+        """Non-slug repos are rejected with a clear error."""
+        result = runner.invoke(cli, ["install", "https://github.com/owner/repo"])
+        assert result.exit_code != 0
+        assert "owner/repo slug" in result.output.lower() or "usage error" in result.output.lower()
+
+    def test_install_invalid_no_slash(self, runner, cli):
+        """Repo without a slash is rejected."""
+        result = runner.invoke(cli, ["install", "notaslug"])
+        assert result.exit_code != 0
+
+    def test_install_list_mocked(self, runner, cli, monkeypatch):
+        """--list prints available skills from the repo."""
+        from unittest.mock import patch
+
+        mock_skills = ["frontend-design", "skill-creator", "pdf"]
+
+        with patch("share.list_skills_in_repo", return_value=mock_skills):
+            result = runner.invoke(cli, ["install", "owner/repo", "--list"])
+
+        assert result.exit_code == 0
+        assert "frontend-design" in result.output
+        assert "skill-creator" in result.output
+        assert "pdf" in result.output
+        assert "3 skill(s) found" in result.output
+
+    def test_install_list_empty_repo(self, runner, cli):
+        """--list on a repo with no skills prints an error."""
+        from unittest.mock import patch
+
+        with patch("share.list_skills_in_repo", return_value=[]):
+            result = runner.invoke(cli, ["install", "owner/repo", "--list"])
+
+        assert "no skills found" in result.output.lower()
+
+    def test_install_single_skill_mocked(self, runner, cli, monkeypatch):
+        """Installing a single skill fetches, saves to cache, and applies to agents."""
+        from unittest.mock import patch
+
+        mock_skill = {
+            "name": "frontend-design",
+            "description": "Frontend design skill",
+            "body": "Frontend skill body.",
+            "tags": ["design"],
+            "targets": [],
+            "version": "1.0.0",
+            "source_tool": "github",
+            "source_repo": "owner/repo",
+            "_raw_content": "---\nname: frontend-design\n---\nFrontend skill body.",
+        }
+
+        with (
+            patch("share.fetch_skill_from_repo", return_value=mock_skill),
+            patch("share._apply_skill_to_agents", return_value=1),
+        ):
+            result = runner.invoke(
+                cli,
+                ["install", "owner/repo", "--skill", "frontend-design", "-a", "cursor", "-y"],
+            )
+
+        assert result.exit_code == 0
+        assert "✓" in result.output
+        assert "frontend-design" in result.output
+
+    def test_install_skill_not_found(self, runner, cli):
+        """A skill that doesn't exist in the repo prints a clear not-found message."""
+        from unittest.mock import patch
+
+        with patch("share.fetch_skill_from_repo", return_value=None):
+            result = runner.invoke(
+                cli,
+                ["install", "owner/repo", "--skill", "nonexistent-skill", "-a", "cursor", "-y"],
+            )
+
+        assert (
+            "not found" in result.output.lower()
+            or "no skills were installed" in result.output.lower()
+        )
+
+    def test_install_all_mocked(self, runner, cli):
+        """--all fetches and installs every skill in the repo."""
+        from unittest.mock import patch
+
+        skill_names = ["skill-a", "skill-b"]
+
+        def fake_fetch(repo, name, branch="main"):
+            return {
+                "name": name,
+                "description": "",
+                "body": f"{name} body",
+                "tags": [],
+                "targets": [],
+                "version": "1.0.0",
+                "source_tool": "github",
+                "source_repo": repo,
+                "_raw_content": f"---\nname: {name}\n---\n{name} body",
+            }
+
+        with (
+            patch("share.list_skills_in_repo", return_value=skill_names),
+            patch("share.fetch_skill_from_repo", side_effect=fake_fetch),
+            patch("share._apply_skill_to_agents", return_value=1),
+        ):
+            result = runner.invoke(cli, ["install", "owner/repo", "--all", "-a", "cursor", "-y"])
+
+        assert result.exit_code == 0
+        assert "2 skill(s)" in result.output
+
+    def test_install_yes_flag_skips_confirmation(self, runner, cli):
+        """The -y flag proceeds without interactive prompts."""
+        from unittest.mock import patch
+
+        mock_skill = {
+            "name": "test-skill",
+            "description": "",
+            "body": "body",
+            "tags": [],
+            "targets": [],
+            "version": "1.0.0",
+            "source_tool": "github",
+            "source_repo": "owner/repo",
+            "_raw_content": "---\nname: test-skill\n---\nbody",
+        }
+
+        with (
+            patch("share.fetch_skill_from_repo", return_value=mock_skill),
+            patch("share._apply_skill_to_agents", return_value=1),
+        ):
+            result = runner.invoke(
+                cli, ["install", "owner/repo", "-s", "test-skill", "-a", "cursor", "-y"]
+            )
+
+        # Should complete without asking any questions
+        assert result.exit_code == 0
+        assert "Proceed?" not in result.output
+
+
+# ---------------------------------------------------------------------------
+# Phase 12: Full round-trip — collect → sync → verify files
 # ---------------------------------------------------------------------------
 
 
