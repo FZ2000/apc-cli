@@ -43,8 +43,8 @@ class TestMemoryViaLLM(unittest.TestCase):
         )
 
         with (
-            patch("appliers.claude.CLAUDE_MD", claude_md),
-            patch("appliers.claude.CLAUDE_DIR", claude_dir),
+            patch("appliers.claude._claude_md", return_value=claude_md),
+            patch("appliers.claude._claude_dir", return_value=claude_dir),
             patch("appliers.base.call_llm", return_value=llm_response, create=True),
             patch("llm_client.call_llm", return_value=llm_response),
         ):

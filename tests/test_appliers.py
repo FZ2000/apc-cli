@@ -38,7 +38,7 @@ class TestClaudeApplier(unittest.TestCase):
         ]
         manifest = self._manifest()
 
-        with patch("appliers.claude.CLAUDE_COMMANDS_DIR", self.commands_dir):
+        with patch("appliers.claude._claude_commands_dir", return_value=self.commands_dir):
             from appliers.claude import ClaudeApplier
 
             applier = ClaudeApplier()
@@ -66,7 +66,7 @@ class TestClaudeApplier(unittest.TestCase):
         secrets = {"TOKEN": "actual_value"}
         manifest = self._manifest()
 
-        with patch("appliers.claude.CLAUDE_JSON", self.claude_json):
+        with patch("appliers.claude._claude_json", return_value=self.claude_json):
             from appliers.claude import ClaudeApplier
 
             applier = ClaudeApplier()
@@ -96,7 +96,7 @@ class TestClaudeApplier(unittest.TestCase):
         ]
         manifest = self._manifest()
 
-        with patch("appliers.claude.CLAUDE_JSON", self.claude_json):
+        with patch("appliers.claude._claude_json", return_value=self.claude_json):
             from appliers.claude import ClaudeApplier
 
             applier = ClaudeApplier()
@@ -130,8 +130,8 @@ class TestClaudeApplier(unittest.TestCase):
         )
 
         with (
-            patch("appliers.claude.CLAUDE_MD", self.claude_md),
-            patch("appliers.claude.CLAUDE_DIR", self.claude_dir),
+            patch("appliers.claude._claude_md", return_value=self.claude_md),
+            patch("appliers.claude._claude_dir", return_value=self.claude_dir),
             patch("llm_client.call_llm", return_value=llm_response),
         ):
             from appliers.claude import ClaudeApplier
@@ -151,7 +151,7 @@ class TestClaudeApplier(unittest.TestCase):
         manifest = self._manifest()
 
         with (
-            patch("appliers.claude.CLAUDE_MD", self.claude_md),
+            patch("appliers.claude._claude_md", return_value=self.claude_md),
             patch("llm_client.call_llm", side_effect=Exception("No LLM")),
         ):
             from appliers.claude import ClaudeApplier
@@ -180,8 +180,8 @@ class TestClaudeApplier(unittest.TestCase):
         )
 
         with (
-            patch("appliers.claude.CLAUDE_MD", self.claude_md),
-            patch("appliers.claude.CLAUDE_DIR", self.claude_dir),
+            patch("appliers.claude._claude_md", return_value=self.claude_md),
+            patch("appliers.claude._claude_dir", return_value=self.claude_dir),
             patch("llm_client.call_llm", return_value=llm_response),
         ):
             from appliers.claude import ClaudeApplier
@@ -240,7 +240,7 @@ class TestClaudeApplier(unittest.TestCase):
             },
         ]
 
-        with patch("appliers.claude.CLAUDE_JSON", self.claude_json):
+        with patch("appliers.claude._claude_json", return_value=self.claude_json):
             from appliers.claude import ClaudeApplier
 
             applier = ClaudeApplier()
@@ -260,7 +260,7 @@ class TestClaudeApplier(unittest.TestCase):
             },
         ]
 
-        with patch("appliers.claude.CLAUDE_JSON", self.claude_json):
+        with patch("appliers.claude._claude_json", return_value=self.claude_json):
             applier = ClaudeApplier()
             applier.apply_mcp_servers(servers_v2, {}, manifest2)
 
@@ -278,7 +278,7 @@ class TestClaudeApplier(unittest.TestCase):
         manifest = self._manifest()
         manifest.record_skill("old-skill", file_path=str(skill_file), content=skill_content)
 
-        with patch("appliers.claude.CLAUDE_COMMANDS_DIR", self.commands_dir):
+        with patch("appliers.claude._claude_commands_dir", return_value=self.commands_dir):
             from appliers.claude import ClaudeApplier
 
             applier = ClaudeApplier()
@@ -300,7 +300,7 @@ class TestClaudeApplier(unittest.TestCase):
         # User edits the file
         skill_file.write_text("# User modified this!", encoding="utf-8")
 
-        with patch("appliers.claude.CLAUDE_COMMANDS_DIR", self.commands_dir):
+        with patch("appliers.claude._claude_commands_dir", return_value=self.commands_dir):
             from appliers.claude import ClaudeApplier
 
             applier = ClaudeApplier()
@@ -377,7 +377,7 @@ class TestReadExistingMemoryFiles(unittest.TestCase):
         claude_md = Path(self.tmpdir) / "CLAUDE.md"
         claude_md.write_text("# My context\n- test", encoding="utf-8")
 
-        with patch("appliers.claude.CLAUDE_MD", claude_md):
+        with patch("appliers.claude._claude_md", return_value=claude_md):
             from appliers.claude import ClaudeApplier
 
             applier = ClaudeApplier()
@@ -387,7 +387,7 @@ class TestReadExistingMemoryFiles(unittest.TestCase):
         self.assertIn("My context", result[str(claude_md)])
 
     def test_claude_no_existing_files(self):
-        with patch("appliers.claude.CLAUDE_MD", Path(self.tmpdir) / "nonexistent.md"):
+        with patch("appliers.claude._claude_md", return_value=Path(self.tmpdir) / "nonexistent.md"):
             from appliers.claude import ClaudeApplier
 
             applier = ClaudeApplier()
@@ -408,11 +408,11 @@ class TestReadExistingMemoryFiles(unittest.TestCase):
         tools_md.write_text("# Tools", encoding="utf-8")
 
         with (
-            patch("appliers.openclaw.OPENCLAW_USER_MD", user_md),
-            patch("appliers.openclaw.OPENCLAW_MEMORY_MD", memory_md),
-            patch("appliers.openclaw.OPENCLAW_IDENTITY_MD", identity_md),
-            patch("appliers.openclaw.OPENCLAW_SOUL_MD", soul_md),
-            patch("appliers.openclaw.OPENCLAW_TOOLS_MD", tools_md),
+            patch("appliers.openclaw._openclaw_user_md", return_value=user_md),
+            patch("appliers.openclaw._openclaw_memory_md", return_value=memory_md),
+            patch("appliers.openclaw._openclaw_identity_md", return_value=identity_md),
+            patch("appliers.openclaw._openclaw_soul_md", return_value=soul_md),
+            patch("appliers.openclaw._openclaw_tools_md", return_value=tools_md),
         ):
             from appliers.openclaw import OpenClawApplier
 

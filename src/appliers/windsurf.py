@@ -7,10 +7,6 @@ from typing import Dict, List
 from appliers.base import BaseApplier
 from appliers.manifest import ToolManifest
 
-WINDSURF_DIR = Path.home() / ".codeium" / "windsurf"
-WINDSURF_MCP_CONFIG = WINDSURF_DIR / "mcp_config.json"
-WINDSURF_MEMORIES_DIR = WINDSURF_DIR / "memories"
-WINDSURF_GLOBAL_RULES = WINDSURF_MEMORIES_DIR / "global_rules.md"
 WINDSURF_RULES_DIR = Path(".windsurf") / "rules"
 
 WINDSURF_MEMORY_SCHEMA = """
@@ -75,6 +71,22 @@ source tools into the same rule file when they cover the same topic.
 """
 
 
+def _windsurf_dir() -> Path:
+    return Path.home() / ".codeium/windsurf"
+
+
+def _windsurf_mcp_config() -> Path:
+    return Path.home() / ".codeium/windsurf/mcp_config.json"
+
+
+def _windsurf_memories_dir() -> Path:
+    return Path.home() / ".codeium/windsurf/memories"
+
+
+def _windsurf_global_rules() -> Path:
+    return Path.home() / ".codeium/windsurf/memories/global_rules.md"
+
+
 class WindsurfApplier(BaseApplier):
     TOOL_NAME = "windsurf"
     MEMORY_SCHEMA = WINDSURF_MEMORY_SCHEMA
@@ -89,9 +101,9 @@ class WindsurfApplier(BaseApplier):
         manifest: ToolManifest,
         override: bool = False,
     ) -> int:
-        if WINDSURF_MCP_CONFIG.exists():
+        if _windsurf_mcp_config().exists():
             try:
-                data = json.loads(WINDSURF_MCP_CONFIG.read_text(encoding="utf-8"))
+                data = json.loads(_windsurf_mcp_config().read_text(encoding="utf-8"))
             except json.JSONDecodeError:
                 data = {}
         else:
@@ -131,17 +143,17 @@ class WindsurfApplier(BaseApplier):
             count += 1
 
         data["mcpServers"] = mcp_servers
-        WINDSURF_DIR.mkdir(parents=True, exist_ok=True)
-        WINDSURF_MCP_CONFIG.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        _windsurf_dir().mkdir(parents=True, exist_ok=True)
+        _windsurf_mcp_config().write_text(json.dumps(data, indent=2), encoding="utf-8")
         return count
 
     def _read_existing_memory_files(self) -> Dict[str, str]:
         """Return {file_path: content} for Windsurf's rule/memory files."""
         result = {}
         # Global rules
-        if WINDSURF_GLOBAL_RULES.exists():
+        if _windsurf_global_rules().exists():
             try:
-                result[str(WINDSURF_GLOBAL_RULES)] = WINDSURF_GLOBAL_RULES.read_text(
+                result[str(_windsurf_global_rules())] = _windsurf_global_rules().read_text(
                     encoding="utf-8"
                 )
             except IOError:

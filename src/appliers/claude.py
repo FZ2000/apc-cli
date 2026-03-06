@@ -8,12 +8,6 @@ from appliers.base import BaseApplier
 from appliers.manifest import ToolManifest
 from frontmatter_parser import render_frontmatter
 
-CLAUDE_DIR = Path.home() / ".claude"
-CLAUDE_JSON = Path.home() / ".claude.json"
-CLAUDE_COMMANDS_DIR = CLAUDE_DIR / "commands"
-CLAUDE_SKILLS_DIR = CLAUDE_DIR / "skills"
-CLAUDE_MD = CLAUDE_DIR / "CLAUDE.md"
-
 CLAUDE_MEMORY_SCHEMA = """
 Claude Code reads instructions from ~/.claude/CLAUDE.md.
 This is a plain Markdown file with no special schema.
@@ -24,13 +18,40 @@ Do NOT include personal information like name/timezone — Claude Code is a codi
 """
 
 
+def _claude_dir() -> Path:
+    return Path.home() / ".claude"
+
+
+def _claude_json() -> Path:
+    return Path.home() / ".claude.json"
+
+
+def _claude_commands_dir() -> Path:
+    return Path.home() / ".claude/commands"
+
+
+def _claude_skills_dir() -> Path:
+    return Path.home() / ".claude/skills"
+
+
+def _claude_md() -> Path:
+    return Path.home() / ".claude/CLAUDE.md"
+
+
 class ClaudeApplier(BaseApplier):
-    SKILL_DIR = CLAUDE_SKILLS_DIR
+    @property
+    def SKILL_DIR(self):
+        return getattr(self, "_skill_dir_override", None) or _claude_skills_dir()
+
+    @SKILL_DIR.setter
+    def SKILL_DIR(self, value):
+        self._skill_dir_override = value
+
     TOOL_NAME = "claude-code"
     MEMORY_SCHEMA = CLAUDE_MEMORY_SCHEMA
 
     def apply_skills(self, skills: List[Dict], manifest: ToolManifest) -> int:
-        CLAUDE_COMMANDS_DIR.mkdir(parents=True, exist_ok=True)
+        _claude_commands_dir().mkdir(parents=True, exist_ok=True)
         count = 0
         for skill in skills:
             name = skill.get("name", "unnamed")
@@ -43,7 +64,7 @@ class ClaudeApplier(BaseApplier):
                 metadata["version"] = skill["version"]
 
             content = render_frontmatter(metadata, skill.get("body", ""))
-            path = CLAUDE_COMMANDS_DIR / f"{name}.md"
+            path = _claude_commands_dir() / f"{name}.md"
             path.write_text(content, encoding="utf-8")
             manifest.record_skill(name, file_path=str(path), content=content)
             count += 1
@@ -57,9 +78,9 @@ class ClaudeApplier(BaseApplier):
         override: bool = False,
     ) -> int:
         # Read existing claude.json or start fresh
-        if CLAUDE_JSON.exists():
+        if _claude_json().exists():
             try:
-                data = json.loads(CLAUDE_JSON.read_text(encoding="utf-8"))
+                data = json.loads(_claude_json().read_text(encoding="utf-8"))
             except json.JSONDecodeError:
                 data = {}
         else:
@@ -100,15 +121,15 @@ class ClaudeApplier(BaseApplier):
             count += 1
 
         data["mcpServers"] = mcp_servers
-        CLAUDE_JSON.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        _claude_json().write_text(json.dumps(data, indent=2), encoding="utf-8")
         return count
 
     def _read_existing_memory_files(self) -> Dict[str, str]:
         """Return {file_path: content} for Claude's memory files."""
         result = {}
-        if CLAUDE_MD.exists():
+        if _claude_md().exists():
             try:
-                result[str(CLAUDE_MD)] = CLAUDE_MD.read_text(encoding="utf-8")
+                result[str(_claude_md())] = _claude_md().read_text(encoding="utf-8")
             except IOError:
                 pass
         return result

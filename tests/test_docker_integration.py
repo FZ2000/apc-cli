@@ -213,73 +213,245 @@ class TestStatus:
         assert "openclaw" in result.output.lower()
         assert (HOME / ".openclaw").is_dir()
 
-    def test_not_synced_before_sync(self, runner, cli, tmp_path, monkeypatch):
-        """Before any sync, a freshly detected tool shows 'not synced'."""
+    # ------------------------------------------------------------------
+    # Parametrized sync-status tests — cover every supported tool so
+    # TOOL_NAME mismatches are caught (TOOL_NAME must equal the detected name).
+    # ------------------------------------------------------------------
+
+    # (detected_name, seed_dirs, applier_tool_name, mcp_file, mcp_key, supports_skills)
+    # seed_dirs: list of relative paths to mkdir under tmp_path
+    # mcp_file:  relative path to the MCP JSON file for this tool (or None)
+    # mcp_key:   top-level JSON key for MCP servers in that file
+    # supports_skills: whether apply_skills() writes files (vs returning 0)
+    _TOOL_PARAMS = [
+        pytest.param(
+            "cursor",
+            [".cursor"],
+            "cursor",
+            ".cursor/mcp.json",
+            "mcpServers",
+            True,
+            id="cursor",
+        ),
+        pytest.param(
+            "claude-code",
+            [".claude"],  # .claude.json is a file, not a dir — created by apply_mcp_servers
+            "claude-code",
+            ".claude.json",
+            "mcpServers",
+            True,
+            id="claude-code",
+        ),
+        pytest.param(
+            "gemini-cli",
+            [".gemini"],
+            "gemini-cli",
+            ".gemini/settings.json",
+            "mcpServers",
+            False,
+            id="gemini-cli",
+        ),
+        pytest.param(
+            "windsurf",
+            [".codeium/windsurf"],
+            "windsurf",
+            ".codeium/windsurf/mcp_config.json",
+            "mcpServers",
+            False,
+            id="windsurf",
+        ),
+        pytest.param(
+            "openclaw",
+            [".openclaw/skills"],
+            "openclaw",
+            None,
+            None,
+            True,
+            id="openclaw",
+        ),
+    ]
+
+    @pytest.mark.parametrize(
+        "detected_name,seed_dirs,applier_tool_name,mcp_file,mcp_key,supports_skills",
+        _TOOL_PARAMS,
+    )
+    def test_not_synced_before_any_sync(
+        self,
+        runner,
+        cli,
+        tmp_path,
+        monkeypatch,
+        detected_name,
+        seed_dirs,
+        applier_tool_name,
+        mcp_file,
+        mcp_key,
+        supports_skills,
+    ):
+        """Every tool shows 'not synced' when no manifest exists yet."""
         monkeypatch.setenv("HOME", str(tmp_path))
-        (tmp_path / ".cursor").mkdir()  # seed one tool
+        monkeypatch.chdir(tmp_path)
+        for d in seed_dirs:
+            (tmp_path / d).mkdir(parents=True, exist_ok=True)
 
         result = runner.invoke(cli, ["status"])
         assert result.exit_code == 0, result.output
-        assert "not synced" in result.output.lower()
-
-    def test_synced_after_sync(self, runner, cli, tmp_path, monkeypatch):
-        """After install -t cursor, status shows 'synced' for cursor."""
-        monkeypatch.setenv("HOME", str(tmp_path))
-        (tmp_path / ".cursor").mkdir()
-
-        runner.invoke(
-            cli,
-            ["install", "anthropics/skills", "--skill", "pdf", "-t", "cursor", "-y"],
+        assert "not synced" in result.output.lower(), (
+            f"{detected_name} should show 'not synced' before any sync, got:\n{result.output}"
         )
+        # Manifest must not exist yet
+        manifest_path = tmp_path / ".apc" / "manifests" / f"{applier_tool_name}.json"
+        assert not manifest_path.exists(), f"manifest should not exist before sync: {manifest_path}"
+
+    @pytest.mark.parametrize(
+        "detected_name,seed_dirs,applier_tool_name,mcp_file,mcp_key,supports_skills",
+        _TOOL_PARAMS,
+    )
+    def test_synced_after_sync(
+        self,
+        runner,
+        cli,
+        tmp_path,
+        monkeypatch,
+        detected_name,
+        seed_dirs,
+        applier_tool_name,
+        mcp_file,
+        mcp_key,
+        supports_skills,
+    ):
+        """Every tool shows 'synced' in status after apc sync runs against it.
+
+        All tools: seed cache directly (avoids blanket collect touching real home
+        dirs) then run sync — appliers are lazy so writes go to tmp_path.
+
+        Skill-supporting tools (cursor, claude-code, openclaw) get one skill in
+        the cache so the manifest records a file_path the consistency check can use.
+        MCP-only tools (gemini-cli, windsurf) get one MCP server entry.
+        """
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.chdir(tmp_path)
+        for d in seed_dirs:
+            (tmp_path / d).mkdir(parents=True, exist_ok=True)
+
+        # Seed an isolated cache — never call collect (would touch real home tool dirs)
+        cache_dir = tmp_path / ".apc" / "cache"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+
+        if supports_skills:
+            (cache_dir / "skills.json").write_text(
+                json.dumps(
+                    [
+                        {
+                            "name": "test-skill",
+                            "description": "A test skill",
+                            "body": "Test skill body.",
+                            "tags": ["test"],
+                            "version": "1.0.0",
+                        }
+                    ]
+                ),
+                encoding="utf-8",
+            )
+        else:
+            (cache_dir / "skills.json").write_text("[]", encoding="utf-8")
+
+        (cache_dir / "mcp_servers.json").write_text(
+            json.dumps(
+                [
+                    {
+                        "name": "test-server",
+                        "command": "echo",
+                        "args": [],
+                        "transport": "stdio",
+                        "source_tool": detected_name,
+                        "targets": [],
+                        "env": {},
+                    }
+                ]
+            ),
+            encoding="utf-8",
+        )
+        (cache_dir / "memory.json").write_text("[]", encoding="utf-8")
+        runner.invoke(cli, ["sync", "--tools", detected_name, "--yes", "--no-memory"])
 
         result = runner.invoke(cli, ["status"])
         assert result.exit_code == 0, result.output
-        assert "synced" in result.output.lower()
-        # Verify manifest written with last_sync_at
-        manifest_path = tmp_path / ".apc" / "manifests" / "cursor.json"
-        assert manifest_path.exists(), "manifest not written after install"
+        assert "synced" in result.output.lower(), (
+            f"{detected_name} should show 'synced' after sync, got:\n{result.output}"
+        )
+        # Manifest must exist with last_sync_at set (keyed by applier TOOL_NAME)
+        manifest_path = tmp_path / ".apc" / "manifests" / f"{applier_tool_name}.json"
+        assert manifest_path.exists(), (
+            f"manifest missing at {manifest_path} — "
+            f"TOOL_NAME mismatch? detected={detected_name!r} applier={applier_tool_name!r}"
+        )
         data = json.loads(manifest_path.read_text())
-        assert data.get("last_sync_at") is not None
+        assert data.get("last_sync_at") is not None, "last_sync_at not set in manifest"
 
-    def test_out_of_sync_when_file_deleted(self, runner, cli, tmp_path, monkeypatch):
-        """After install, deleting the synced file causes tool to show 'out of sync'."""
+    @pytest.mark.parametrize(
+        "detected_name,seed_dirs,applier_tool_name,mcp_file,mcp_key,supports_skills",
+        [p for p in _TOOL_PARAMS if p.values[5]],  # only tools that write skill files
+    )
+    def test_out_of_sync_when_skill_deleted(
+        self,
+        runner,
+        cli,
+        tmp_path,
+        monkeypatch,
+        detected_name,
+        seed_dirs,
+        applier_tool_name,
+        mcp_file,
+        mcp_key,
+        supports_skills,
+    ):
+        """Deleting a synced skill file causes 'out of sync' for that tool."""
         monkeypatch.setenv("HOME", str(tmp_path))
-        (tmp_path / ".cursor").mkdir()
+        monkeypatch.chdir(tmp_path)
+        for d in seed_dirs:
+            (tmp_path / d).mkdir(parents=True, exist_ok=True)
 
-        runner.invoke(
-            cli,
-            ["install", "anthropics/skills", "--skill", "pdf", "-t", "cursor", "-y"],
+        # Seed isolated cache then sync — appliers are lazy so all writes go to tmp_path
+        cache_dir = tmp_path / ".apc" / "cache"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        (cache_dir / "skills.json").write_text(
+            json.dumps(
+                [
+                    {
+                        "name": "test-skill",
+                        "description": "A test skill",
+                        "body": "Test skill body.",
+                        "tags": ["test"],
+                        "version": "1.0.0",
+                    }
+                ]
+            ),
+            encoding="utf-8",
+        )
+        (cache_dir / "mcp_servers.json").write_text("[]", encoding="utf-8")
+        (cache_dir / "memory.json").write_text("[]", encoding="utf-8")
+        runner.invoke(cli, ["sync", "--tools", detected_name, "--yes", "--no-memory"])
+
+        # Confirm synced first
+        r1 = runner.invoke(cli, ["status"])
+        assert "synced" in r1.output.lower(), (
+            f"{detected_name}: expected synced before delete, got:\n{r1.output}"
         )
 
-        # Confirm synced
-        r1 = runner.invoke(cli, ["status"])
-        assert "synced" in r1.output.lower()
-
-        # Delete the skill file that was written
-        rules_dir = tmp_path / ".cursor" / "rules"
-        skill_files = list(rules_dir.glob("*.mdc"))
-        assert skill_files, "no skill files written by install"
-        skill_files[0].unlink()
+        # Find and delete a skill file recorded by the manifest
+        manifest_path = tmp_path / ".apc" / "manifests" / f"{applier_tool_name}.json"
+        manifest_data = json.loads(manifest_path.read_text())
+        skill_paths = [
+            v["file_path"] for v in manifest_data.get("skills", {}).values() if "file_path" in v
+        ]
+        assert skill_paths, f"no skill file_paths in manifest for {detected_name}"
+        Path(skill_paths[0]).unlink()
 
         r2 = runner.invoke(cli, ["status"])
-        assert "out of sync" in r2.output.lower()
-
-    def test_status_shows_synced_for_install_target(self, runner, cli, tmp_path, monkeypatch):
-        """apc install -t cursor writes files immediately; status shows synced without apc sync."""
-        monkeypatch.setenv("HOME", str(tmp_path))
-        (tmp_path / ".cursor").mkdir()
-
-        runner.invoke(
-            cli,
-            ["install", "anthropics/skills", "--skill", "pdf", "-t", "cursor", "-y"],
+        assert "out of sync" in r2.output.lower(), (
+            f"{detected_name}: expected 'out of sync' after delete, got:\n{r2.output}"
         )
-
-        result = runner.invoke(cli, ["status"])
-        assert result.exit_code == 0, result.output
-        assert "synced" in result.output.lower()
-        # Manifest recorded the file
-        manifest_path = tmp_path / ".apc" / "manifests" / "cursor.json"
-        assert manifest_path.exists()
 
 
 # ---------------------------------------------------------------------------

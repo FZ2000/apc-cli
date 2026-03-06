@@ -7,10 +7,6 @@ from typing import Dict, List
 from appliers.base import BaseApplier
 from appliers.manifest import ToolManifest
 
-GEMINI_DIR = Path.home() / ".gemini"
-GEMINI_SETTINGS = GEMINI_DIR / "settings.json"
-GEMINI_MD = GEMINI_DIR / "GEMINI.md"
-
 GEMINI_MEMORY_SCHEMA = """
 Gemini CLI reads instructions from ~/.gemini/GEMINI.md (global) and ./GEMINI.md (per-project).
 This applier targets the GLOBAL file at ~/.gemini/GEMINI.md.
@@ -63,6 +59,18 @@ organized sections. Preserve any existing "## Gemini Added Memories" content.
 """
 
 
+def _gemini_dir() -> Path:
+    return Path.home() / ".gemini"
+
+
+def _gemini_settings() -> Path:
+    return Path.home() / ".gemini/settings.json"
+
+
+def _gemini_md() -> Path:
+    return Path.home() / ".gemini/GEMINI.md"
+
+
 class GeminiApplier(BaseApplier):
     TOOL_NAME = "gemini-cli"
     MEMORY_SCHEMA = GEMINI_MEMORY_SCHEMA
@@ -77,9 +85,9 @@ class GeminiApplier(BaseApplier):
         manifest: ToolManifest,
         override: bool = False,
     ) -> int:
-        if GEMINI_SETTINGS.exists():
+        if _gemini_settings().exists():
             try:
-                data = json.loads(GEMINI_SETTINGS.read_text(encoding="utf-8"))
+                data = json.loads(_gemini_settings().read_text(encoding="utf-8"))
             except json.JSONDecodeError:
                 data = {}
         else:
@@ -119,16 +127,16 @@ class GeminiApplier(BaseApplier):
             count += 1
 
         data["mcpServers"] = mcp_servers
-        GEMINI_DIR.mkdir(parents=True, exist_ok=True)
-        GEMINI_SETTINGS.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        _gemini_dir().mkdir(parents=True, exist_ok=True)
+        _gemini_settings().write_text(json.dumps(data, indent=2), encoding="utf-8")
         return count
 
     def _read_existing_memory_files(self) -> Dict[str, str]:
         """Return {file_path: content} for Gemini's memory files."""
         result = {}
-        if GEMINI_MD.exists():
+        if _gemini_md().exists():
             try:
-                result[str(GEMINI_MD)] = GEMINI_MD.read_text(encoding="utf-8")
+                result[str(_gemini_md())] = _gemini_md().read_text(encoding="utf-8")
             except IOError:
                 pass
         return result

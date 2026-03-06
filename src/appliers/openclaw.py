@@ -7,15 +7,6 @@ from appliers.base import BaseApplier
 from appliers.manifest import ToolManifest
 from frontmatter_parser import render_frontmatter
 
-OPENCLAW_DIR = Path.home() / ".openclaw"
-OPENCLAW_SKILLS_DIR = OPENCLAW_DIR / "skills"
-OPENCLAW_WORKSPACE = OPENCLAW_DIR / "workspace"
-OPENCLAW_USER_MD = OPENCLAW_WORKSPACE / "USER.md"
-OPENCLAW_MEMORY_MD = OPENCLAW_WORKSPACE / "MEMORY.md"
-OPENCLAW_IDENTITY_MD = OPENCLAW_WORKSPACE / "IDENTITY.md"
-OPENCLAW_SOUL_MD = OPENCLAW_WORKSPACE / "SOUL.md"
-OPENCLAW_TOOLS_MD = OPENCLAW_WORKSPACE / "TOOLS.md"
-
 OPENCLAW_MEMORY_SCHEMA = """
 OpenClaw uses these files in ~/.openclaw/workspace/:
 1. USER.md — Personal context about the user (name, timezone, pronouns, preferences).
@@ -29,13 +20,52 @@ OpenClaw uses these files in ~/.openclaw/workspace/:
 """
 
 
+def _openclaw_dir() -> Path:
+    return Path.home() / ".openclaw"
+
+
+def _openclaw_skills_dir() -> Path:
+    return Path.home() / ".openclaw/skills"
+
+
+def _openclaw_workspace() -> Path:
+    return Path.home() / ".openclaw/workspace"
+
+
+def _openclaw_user_md() -> Path:
+    return Path.home() / ".openclaw/workspace/USER.md"
+
+
+def _openclaw_memory_md() -> Path:
+    return Path.home() / ".openclaw/workspace/MEMORY.md"
+
+
+def _openclaw_identity_md() -> Path:
+    return Path.home() / ".openclaw/workspace/IDENTITY.md"
+
+
+def _openclaw_soul_md() -> Path:
+    return Path.home() / ".openclaw/workspace/SOUL.md"
+
+
+def _openclaw_tools_md() -> Path:
+    return Path.home() / ".openclaw/workspace/TOOLS.md"
+
+
 class OpenClawApplier(BaseApplier):
-    SKILL_DIR = OPENCLAW_SKILLS_DIR
+    @property
+    def SKILL_DIR(self):
+        return getattr(self, "_skill_dir_override", None) or _openclaw_skills_dir()
+
+    @SKILL_DIR.setter
+    def SKILL_DIR(self, value):
+        self._skill_dir_override = value
+
     TOOL_NAME = "openclaw"
     MEMORY_SCHEMA = OPENCLAW_MEMORY_SCHEMA
 
     def apply_skills(self, skills: List[Dict], manifest: ToolManifest) -> int:
-        OPENCLAW_SKILLS_DIR.mkdir(parents=True, exist_ok=True)
+        _openclaw_skills_dir().mkdir(parents=True, exist_ok=True)
         count = 0
         for skill in skills:
             name = skill.get("name", "unnamed")
@@ -50,7 +80,7 @@ class OpenClawApplier(BaseApplier):
             content = render_frontmatter(metadata, skill.get("body", ""))
 
             # OpenClaw uses directory-based skills: <name>/SKILL.md
-            skill_dir = OPENCLAW_SKILLS_DIR / name
+            skill_dir = _openclaw_skills_dir() / name
             skill_dir.mkdir(parents=True, exist_ok=True)
             path = skill_dir / "SKILL.md"
             path.write_text(content, encoding="utf-8")
@@ -72,11 +102,11 @@ class OpenClawApplier(BaseApplier):
         """Return {file_path: content} for OpenClaw's memory files."""
         result = {}
         for path in [
-            OPENCLAW_USER_MD,
-            OPENCLAW_MEMORY_MD,
-            OPENCLAW_IDENTITY_MD,
-            OPENCLAW_SOUL_MD,
-            OPENCLAW_TOOLS_MD,
+            _openclaw_user_md(),
+            _openclaw_memory_md(),
+            _openclaw_identity_md(),
+            _openclaw_soul_md(),
+            _openclaw_tools_md(),
         ]:
             if path.exists():
                 try:
