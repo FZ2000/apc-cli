@@ -30,7 +30,7 @@ build-backend = "setuptools.build_meta"
 package-dir = {"" = "src"}
 py-modules = [
     "cache", "collect", "config", "export_import",
-    "frontmatter_parser", "install", "llm_client", "llm_config",
+"frontmatter_parser", "install", "llm_client", "llm_config",
     "main", "mcp", "memory", "secrets_manager",
     "skill", "skills", "status", "sync_helpers", "ui",
 ]
