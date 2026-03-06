@@ -91,6 +91,10 @@ class WindsurfApplier(BaseApplier):
     TOOL_NAME = "windsurf"
     MEMORY_SCHEMA = WINDSURF_MEMORY_SCHEMA
 
+    @property  # type: ignore[override]
+    def MEMORY_ALLOWED_BASE(self) -> "Path":  # noqa: N802
+        return _windsurf_dir()
+
     def apply_skills(self, skills: List[Dict], manifest: ToolManifest) -> int:
         return 0
 

@@ -70,6 +70,12 @@ class BaseApplier(ABC):
     # with a description of how the tool expects its memory files.
     MEMORY_SCHEMA: str = ""
 
+    # Subclasses MUST override this with the directory the LLM is allowed to
+    # write memory files into.  apply_memory_via_llm() rejects any path that
+    # does not resolve inside this directory.  Defaults to Path.home() as a
+    # minimum guard; narrow it in each applier.
+    MEMORY_ALLOWED_BASE: Optional[Path] = None
+
     def get_manifest(self) -> ToolManifest:
         """Return (or create) the manifest for this tool."""
         return ToolManifest(self.TOOL_NAME)
@@ -95,7 +101,14 @@ class BaseApplier(ABC):
         count = 0
 
         for skill in skills:
-            name = skill.get("name", "unnamed")
+            raw_name = skill.get("name", "unnamed")
+            try:
+                from skills import sanitize_skill_name
+                name = sanitize_skill_name(raw_name)
+            except (ValueError, ImportError):
+                warning(f"Skipping skill with invalid name: {raw_name!r}")
+                continue
+
             source = source_dir / name
             if not source.exists():
                 continue
@@ -212,6 +225,10 @@ class BaseApplier(ABC):
             warning(f"Raw LLM response: {response[:500]}")
             return 0
 
+        # Determine the allowed write root for this applier.
+        # Resolving at call-time so tests can monkeypatch Path.home().
+        allowed_base = (self.MEMORY_ALLOWED_BASE or Path.home()).resolve()
+
         # Write files
         count = 0
         for op in file_ops:
@@ -222,11 +239,21 @@ class BaseApplier(ABC):
             if not file_path or content is None:
                 continue
 
-            path = Path(file_path)
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(content, encoding="utf-8")
+            # Security: resolve the path (collapses `..`) and assert it lands
+            # inside the allowed base directory.  Rejects prompt-injection or
+            # hallucinated paths like /etc/cron.d/evil.
+            resolved = Path(file_path).resolve()
+            if not str(resolved).startswith(str(allowed_base) + "/") and resolved != allowed_base:
+                warning(
+                    f"[security] Rejecting LLM-suggested write outside allowed path: "
+                    f"{file_path!r} (resolved: {resolved}, allowed base: {allowed_base})"
+                )
+                continue
+
+            resolved.parent.mkdir(parents=True, exist_ok=True)
+            resolved.write_text(content, encoding="utf-8")
             manifest.record_memory(
-                file_path=str(path),
+                file_path=str(resolved),
                 content=content,
                 entry_ids=[e.get("entry_id") or e.get("id", "") for e in collected_memory],
             )

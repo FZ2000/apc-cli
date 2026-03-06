@@ -10,7 +10,7 @@ import click
 from appliers import get_applier
 from cache import load_skills, merge_skills, save_skills
 from extractors import detect_installed_tools
-from skills import fetch_skill_from_repo, list_skills_in_repo, save_skill_file
+from skills import fetch_skill_from_repo, list_skills_in_repo, sanitize_skill_name, save_skill_file
 
 _AGENTS = ["claude-code", "cursor", "gemini-cli", "github-copilot", "openclaw", "windsurf"]
 
@@ -174,6 +174,13 @@ def install(repo, skills, install_all, targets, branch, list_only, yes):
         skill = fetch_skill_from_repo(repo, skill_name, branch)
         if not skill:
             click.echo(f" not found in {repo}")
+            continue
+
+        # Validate name once more before writing to disk (save_skill_file also validates)
+        try:
+            sanitize_skill_name(skill["name"])
+        except ValueError as exc:
+            click.echo(f" skipped — invalid name: {exc}", err=True)
             continue
 
         # Save to ~/.apc/skills/<name>/SKILL.md

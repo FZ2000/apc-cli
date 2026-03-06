@@ -50,6 +50,10 @@ class ClaudeApplier(BaseApplier):
     TOOL_NAME = "claude-code"
     MEMORY_SCHEMA = CLAUDE_MEMORY_SCHEMA
 
+    @property  # type: ignore[override]
+    def MEMORY_ALLOWED_BASE(self) -> "Path":  # noqa: N802
+        return _claude_dir()
+
     def apply_skills(self, skills: List[Dict], manifest: ToolManifest) -> int:
         _claude_commands_dir().mkdir(parents=True, exist_ok=True)
         count = 0

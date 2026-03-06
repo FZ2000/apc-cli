@@ -72,6 +72,11 @@ class CopilotApplier(BaseApplier):
     TOOL_NAME = "github-copilot"
     MEMORY_SCHEMA = COPILOT_MEMORY_SCHEMA
 
+    @property  # type: ignore[override]
+    def MEMORY_ALLOWED_BASE(self) -> "Path":  # noqa: N802
+        # Copilot writes to .github/ in the current project directory.
+        return Path.cwd()
+
     def apply_skills(self, skills: List[Dict], manifest: ToolManifest) -> int:
         count = 0
         for skill in skills:

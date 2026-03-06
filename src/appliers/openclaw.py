@@ -64,6 +64,10 @@ class OpenClawApplier(BaseApplier):
     TOOL_NAME = "openclaw"
     MEMORY_SCHEMA = OPENCLAW_MEMORY_SCHEMA
 
+    @property  # type: ignore[override]
+    def MEMORY_ALLOWED_BASE(self) -> "Path":  # noqa: N802
+        return _openclaw_workspace()
+
     def apply_skills(self, skills: List[Dict], manifest: ToolManifest) -> int:
         _openclaw_skills_dir().mkdir(parents=True, exist_ok=True)
         count = 0

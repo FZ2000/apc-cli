@@ -4,6 +4,7 @@ Skills are stored in ~/.apc/skills/<name>/SKILL.md and linked into each
 tool's skill directory on sync.
 """
 
+import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -15,6 +16,29 @@ from frontmatter_parser import parse_frontmatter
 DEFAULT_BRANCH = "main"
 _GITHUB_TREE_API = "https://api.github.com/repos/{repo}/git/trees/{branch}?recursive=1"
 _GITHUB_RAW = "https://raw.githubusercontent.com/{repo}/{branch}/skills/{skill}/SKILL.md"
+
+_SKILL_NAME_SAFE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_\-]{0,63}$")
+
+
+def sanitize_skill_name(name: str) -> str:
+    """Return a safe skill name or raise ValueError.
+
+    Rules:
+    - Basename only (strips directory components).
+    - No path separators, no '..' traversal.
+    - Must match [A-Za-z0-9][A-Za-z0-9_\\-]{0,63}.
+    """
+    # Take basename — eliminates leading paths like "../../etc"
+    safe = Path(name).name
+    # Reject anything that still looks path-like after basename
+    if not safe or safe in (".", ".."):
+        raise ValueError(f"Invalid skill name (empty or dot): {name!r}")
+    if not _SKILL_NAME_SAFE.match(safe):
+        raise ValueError(
+            f"Skill name {safe!r} contains invalid characters. "
+            "Only letters, digits, hyphens, and underscores are allowed."
+        )
+    return safe
 
 
 # ---------------------------------------------------------------------------
@@ -31,6 +55,7 @@ def get_skills_dir() -> Path:
 
 def save_skill_file(skill_name: str, raw_content: str) -> Path:
     """Save raw SKILL.md to ~/.apc/skills/<name>/SKILL.md. Returns the path."""
+    skill_name = sanitize_skill_name(skill_name)  # raises ValueError on traversal
     skill_dir = get_skills_dir() / skill_name
     skill_dir.mkdir(exist_ok=True)
     path = skill_dir / "SKILL.md"
@@ -86,8 +111,15 @@ def fetch_skill_from_repo(
         return None
 
     metadata, body = parse_frontmatter(resp.text)
+    # Sanitize the name from frontmatter — it comes from an untrusted source.
+    raw_name = metadata.get("name", skill_name)
+    try:
+        safe_name = sanitize_skill_name(raw_name)
+    except ValueError:
+        # Fall back to the URL-path component (already validated by list_skills_in_repo)
+        safe_name = sanitize_skill_name(skill_name)
     return {
-        "name": metadata.get("name", skill_name),
+        "name": safe_name,
         "description": metadata.get("description", ""),
         "body": body.strip(),
         "tags": metadata.get("tags", []),

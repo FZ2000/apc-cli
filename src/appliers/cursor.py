@@ -77,6 +77,10 @@ class CursorApplier(BaseApplier):
     TOOL_NAME = "cursor"
     MEMORY_SCHEMA = CURSOR_MEMORY_SCHEMA
 
+    @property  # type: ignore[override]
+    def MEMORY_ALLOWED_BASE(self) -> "Path":  # noqa: N802
+        return _cursor_dir()
+
     @property
     def SKILL_DIR(self) -> Path:  # type: ignore[override]
         return _cursor_rules_dir()

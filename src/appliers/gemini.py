@@ -75,6 +75,10 @@ class GeminiApplier(BaseApplier):
     TOOL_NAME = "gemini-cli"
     MEMORY_SCHEMA = GEMINI_MEMORY_SCHEMA
 
+    @property  # type: ignore[override]
+    def MEMORY_ALLOWED_BASE(self) -> "Path":  # noqa: N802
+        return _gemini_dir()
+
     def apply_skills(self, skills: List[Dict], manifest: ToolManifest) -> int:
         return 0  # Gemini doesn't have a skills format
 
