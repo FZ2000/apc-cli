@@ -271,9 +271,12 @@ def export_cmd(path: str, no_secrets: bool, yes: bool):
     use_encryption = not no_secrets and _check_pyrage()
 
     if not no_secrets and not _check_pyrage():
-        warning("pyrage not installed — exporting without secret encryption.")
-        warning("Install with: pip install pyrage")
-        use_encryption = False
+        error(
+            "pyrage is not installed — secrets cannot be encrypted.\n"
+            "  Install:          pip install pyrage\n"
+            "  Export without secrets: apc export --no-secrets"
+        )
+        raise SystemExit(1)
 
     if use_encryption:
         public_key, _priv = _load_or_create_identity()

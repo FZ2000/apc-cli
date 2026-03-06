@@ -310,6 +310,43 @@ class TestExportCommand(unittest.TestCase):
         self.export_dir = Path(self.tmpdir) / "test-export"
 
     @patch("export_import._check_pyrage", return_value=False)
+    def test_export_fails_loudly_without_pyrage(self, _mock_pyrage):
+        """Without pyrage and without --no-secrets, export must abort (not silently export plaintext)."""
+        from click.testing import CliRunner
+
+        runner = CliRunner()
+        result = runner.invoke(export_cmd, [str(self.export_dir), "--yes"])
+
+        # Must NOT succeed — secrets would be plaintext
+        self.assertNotEqual(result.exit_code, 0)
+        self.assertFalse(self.export_dir.exists(), "Export dir should not be created on abort")
+
+    @patch("export_import._check_pyrage", return_value=False)
+    @patch("export_import.get_skills_dir")
+    @patch("export_import.get_config_dir")
+    @patch("export_import.load_mcp_servers", return_value=[])
+    @patch(
+        "export_import.load_local_bundle",
+        return_value={"skills": [], "mcp_servers": [], "memory": []},
+    )
+    def test_export_no_secrets_succeeds_without_pyrage(
+        self, mock_bundle, mock_mcp, mock_config, mock_skills, _mock_pyrage
+    ):
+        """--no-secrets works fine even when pyrage is unavailable."""
+        config_dir = Path(self.tmpdir) / "config"
+        config_dir.mkdir()
+        mock_config.return_value = config_dir
+        mock_skills.return_value = config_dir / "skills"
+
+        from click.testing import CliRunner
+
+        runner = CliRunner()
+        result = runner.invoke(export_cmd, [str(self.export_dir), "--yes", "--no-secrets"])
+
+        self.assertEqual(result.exit_code, 0, result.output)
+        self.assertTrue((self.export_dir / "apc-export.json").exists())
+
+    @patch("export_import._check_pyrage", return_value=False)
     @patch("export_import.get_skills_dir")
     @patch("export_import.get_config_dir")
     @patch("export_import.load_mcp_servers", return_value=[])
@@ -328,7 +365,7 @@ class TestExportCommand(unittest.TestCase):
         from click.testing import CliRunner
 
         runner = CliRunner()
-        result = runner.invoke(export_cmd, [str(self.export_dir), "--yes"])
+        result = runner.invoke(export_cmd, [str(self.export_dir), "--yes", "--no-secrets"])
 
         self.assertEqual(result.exit_code, 0, result.output)
         self.assertTrue((self.export_dir / "apc-export.json").exists())
@@ -363,7 +400,7 @@ class TestExportCommand(unittest.TestCase):
         from click.testing import CliRunner
 
         runner = CliRunner()
-        result = runner.invoke(export_cmd, [str(self.export_dir), "--yes"])
+        result = runner.invoke(export_cmd, [str(self.export_dir), "--yes", "--no-secrets"])
 
         self.assertEqual(result.exit_code, 0, result.output)
 

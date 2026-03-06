@@ -46,9 +46,9 @@ def _tool_sync_status(name: str) -> str:
         if fp := info_dict.get("link_path"):
             recorded_paths.append(fp)
 
-    for info_dict in manifest._data.get("memory", {}).values():
-        if fp := info_dict.get("file_path"):
-            recorded_paths.append(fp)
+    # memory is a flat dict {file_path, checksum, ...}, not a dict-of-dicts.
+    if fp := manifest._data.get("memory", {}).get("file_path"):
+        recorded_paths.append(fp)
 
     # If nothing was recorded (e.g. only MCP servers were synced), trust the timestamp
     if not recorded_paths:

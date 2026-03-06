@@ -93,21 +93,25 @@ def sync_skills(tool_list: List[str]) -> Tuple[int, int]:
             applier = get_applier(tool_name)
             manifest = applier.get_manifest()
 
+            # Per-tool counts (reset each iteration)
+            tool_copy = 0
+            tool_link = 0
+
             # Copy collected skills
             if collected_skills:
-                c = applier.apply_skills(collected_skills, manifest)
-                total_copy += c
+                tool_copy = applier.apply_skills(collected_skills, manifest)
+                total_copy += tool_copy
 
             # Link installed skills
             if installed_skills:
-                lk = applier.link_skills(installed_skills, skills_dir, manifest)
-                total_link += lk
+                tool_link = applier.link_skills(installed_skills, skills_dir, manifest)
+                total_link += tool_link
 
             # Prune orphaned skills (keep MCP names empty — not our concern)
             applier.prune(all_skill_names, [], manifest)
             manifest.save()
 
-            success(f"{tool_name}: {total_copy} copied, {total_link} linked")
+            success(f"{tool_name}: {tool_copy} copied, {tool_link} linked")
         except Exception as e:
             error(f"Failed to sync skills to {tool_name}: {e}")
 
