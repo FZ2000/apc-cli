@@ -99,7 +99,7 @@ def install(repo, skills, install_all, agents, branch, list_only, yes):
     # Validate: repo must look like owner/repo
     if "/" not in repo or repo.startswith("http"):
         raise click.UsageError(
-            "REPO must be a GitHub owner/repo slug (e.g. vercel-labs/agent-skills)"
+            "REPO must be a GitHub repository name in owner/repo format (e.g. vercel-labs/agent-skills)"
         )
 
     # --list: just show available skills and exit

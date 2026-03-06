@@ -590,7 +590,7 @@ class TestInstall:
         """Full GitHub URLs are rejected — must be owner/repo slug."""
         result = runner.invoke(cli, ["install", "https://github.com/anthropics/skills"])
         assert result.exit_code != 0
-        assert "owner/repo slug" in result.output.lower()
+        assert "owner/repo format" in result.output.lower()
 
     def test_install_invalid_no_slash(self, runner, cli):
         """A bare name with no slash is rejected immediately."""
