@@ -13,24 +13,16 @@ _SPECIALIZED = {
     "openclaw": "appliers.openclaw:OpenClawApplier",
 }
 
-_ALIASES = {
-    "claude": "claude-code",
-    "gemini": "gemini-cli",
-    "copilot": "github-copilot",
-}
-
 
 def get_applier(tool_name: str) -> BaseApplier:
     """Get the applier for a supported tool.
 
     Raises ValueError if the tool is not supported.
     """
-    resolved = _ALIASES.get(tool_name, tool_name)
+    if tool_name not in _SPECIALIZED:
+        raise ValueError(f"Unsupported tool: {tool_name!r}. Valid tools: {', '.join(_SPECIALIZED)}")
 
-    if resolved not in _SPECIALIZED:
-        raise ValueError(f"Unsupported tool: {tool_name}")
-
-    module_path, cls_name = _SPECIALIZED[resolved].split(":")
+    module_path, cls_name = _SPECIALIZED[tool_name].split(":")
     mod = importlib.import_module(module_path)
     cls = getattr(mod, cls_name)
     return cls()

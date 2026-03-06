@@ -79,7 +79,7 @@ apc status
 apc sync
 
 # 4. Or sync to specific tools only
-apc sync --tools cursor,gemini
+apc sync --tools cursor,gemini-cli
 
 # 5. Install skills from a GitHub repo
 apc install owner/repo --skill my-skill
@@ -113,7 +113,7 @@ apc configure
 
 | Flag | Description |
 |------|-------------|
-| `--tools <list>` | Comma-separated tool list (e.g., `cursor,gemini`) |
+| `--tools <list>` | Comma-separated tool list (e.g., `cursor,gemini-cli`) |
 | `--all` | Apply to all detected tools without prompting |
 | `--no-memory` | Skip memory entries |
 | `--override-mcp` | Replace existing MCP servers instead of merging |

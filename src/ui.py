@@ -112,7 +112,7 @@ def cache_summary_table(skills: int, mcp: int, memory: int, title: str = "Cache 
 def tools_status_table(tools: List[Dict[str, str]]) -> None:
     """Display tool status with sync badges.
 
-    tools: [{"name": "claude", "status": "synced"}, ...]
+    tools: [{"name": "claude-code", "status": "synced"}, ...]
     """
     table = Table(title="Detected Tools", show_lines=False)
     table.add_column("Tool", style="cyan", no_wrap=True)
