@@ -92,7 +92,7 @@ class ClaudeExtractor(BaseExtractor):
                     continue
                 entries.append(
                     {
-                        "id": _content_hash_id("claude", path.name, content),
+                        "id": _content_hash_id("claude-code", path.name, content),
                         "source_tool": "claude-code",
                         "source_file": path.name,
                         "source_path": str(path),
