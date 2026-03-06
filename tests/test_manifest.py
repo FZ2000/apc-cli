@@ -3,6 +3,7 @@
 import json
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 from appliers.manifest import ToolManifest, _sha256
@@ -145,3 +146,108 @@ class TestToolManifest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestToolSyncStatus(unittest.TestCase):
+    """Unit tests for status._tool_sync_status — file-system consistency check."""
+
+    def setUp(self):
+        self.tmpdir = Path(tempfile.mkdtemp())
+        self.manifest_path = self.tmpdir / "cursor.json"
+
+    def _make_manifest(self) -> ToolManifest:
+        return ToolManifest("cursor", path=self.manifest_path)
+
+    def test_not_synced_when_no_manifest(self):
+        from status import _tool_sync_status
+
+        with unittest.mock.patch(
+            "status.ToolManifest",
+            side_effect=lambda name: ToolManifest(name, path=self.manifest_path),
+        ):
+            assert _tool_sync_status("cursor") == "not synced"
+
+    def test_synced_when_all_files_present(self):
+        from status import _tool_sync_status
+
+        skill_file = self.tmpdir / "pdf.mdc"
+        skill_file.write_text("# pdf skill")
+
+        m = self._make_manifest()
+        m.record_skill("pdf", file_path=str(skill_file), content="# pdf skill")
+        m.save()
+
+        with unittest.mock.patch(
+            "status.ToolManifest",
+            side_effect=lambda name: ToolManifest(name, path=self.manifest_path),
+        ):
+            assert _tool_sync_status("cursor") == "synced"
+
+    def test_out_of_sync_when_file_deleted(self):
+        from status import _tool_sync_status
+
+        skill_file = self.tmpdir / "pdf.mdc"
+        skill_file.write_text("# pdf skill")
+
+        m = self._make_manifest()
+        m.record_skill("pdf", file_path=str(skill_file), content="# pdf skill")
+        m.save()
+
+        skill_file.unlink()  # simulate deletion
+
+        with unittest.mock.patch(
+            "status.ToolManifest",
+            side_effect=lambda name: ToolManifest(name, path=self.manifest_path),
+        ):
+            assert _tool_sync_status("cursor") == "out of sync"
+
+    def test_synced_when_only_mcp_synced(self):
+        """If only MCP servers were synced (no skill files recorded), trust the timestamp."""
+        from status import _tool_sync_status
+
+        m = self._make_manifest()
+        m.record_mcp_server("filesystem")
+        m.save()
+
+        with unittest.mock.patch(
+            "status.ToolManifest",
+            side_effect=lambda name: ToolManifest(name, path=self.manifest_path),
+        ):
+            assert _tool_sync_status("cursor") == "synced"
+
+    def test_out_of_sync_when_linked_skill_missing(self):
+        """Linked skill symlink removed → out of sync."""
+        from status import _tool_sync_status
+
+        link_path = self.tmpdir / "pdf.mdc"
+        # Don't create the symlink — it's missing
+
+        m = self._make_manifest()
+        m.record_linked_skill("pdf", link_path=str(link_path), target="/source/SKILL.md")
+        m.save()
+
+        with unittest.mock.patch(
+            "status.ToolManifest",
+            side_effect=lambda name: ToolManifest(name, path=self.manifest_path),
+        ):
+            assert _tool_sync_status("cursor") == "out of sync"
+
+    def test_partial_files_missing_is_out_of_sync(self):
+        """One skill file present, one missing → out of sync."""
+        from status import _tool_sync_status
+
+        present = self.tmpdir / "skill-a.mdc"
+        present.write_text("# skill a")
+        missing = self.tmpdir / "skill-b.mdc"
+        # skill-b not created
+
+        m = self._make_manifest()
+        m.record_skill("skill-a", file_path=str(present), content="# skill a")
+        m.record_skill("skill-b", file_path=str(missing), content="# skill b")
+        m.save()
+
+        with unittest.mock.patch(
+            "status.ToolManifest",
+            side_effect=lambda name: ToolManifest(name, path=self.manifest_path),
+        ):
+            assert _tool_sync_status("cursor") == "out of sync"

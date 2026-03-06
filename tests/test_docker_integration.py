@@ -213,6 +213,74 @@ class TestStatus:
         assert "openclaw" in result.output.lower()
         assert (HOME / ".openclaw").is_dir()
 
+    def test_not_synced_before_sync(self, runner, cli, tmp_path, monkeypatch):
+        """Before any sync, a freshly detected tool shows 'not synced'."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        (tmp_path / ".cursor").mkdir()  # seed one tool
+
+        result = runner.invoke(cli, ["status"])
+        assert result.exit_code == 0, result.output
+        assert "not synced" in result.output.lower()
+
+    def test_synced_after_sync(self, runner, cli, tmp_path, monkeypatch):
+        """After install -t cursor, status shows 'synced' for cursor."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        (tmp_path / ".cursor").mkdir()
+
+        runner.invoke(
+            cli,
+            ["install", "anthropics/skills", "--skill", "pdf", "-t", "cursor", "-y"],
+        )
+
+        result = runner.invoke(cli, ["status"])
+        assert result.exit_code == 0, result.output
+        assert "synced" in result.output.lower()
+        # Verify manifest written with last_sync_at
+        manifest_path = tmp_path / ".apc" / "manifests" / "cursor.json"
+        assert manifest_path.exists(), "manifest not written after install"
+        data = json.loads(manifest_path.read_text())
+        assert data.get("last_sync_at") is not None
+
+    def test_out_of_sync_when_file_deleted(self, runner, cli, tmp_path, monkeypatch):
+        """After install, deleting the synced file causes tool to show 'out of sync'."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        (tmp_path / ".cursor").mkdir()
+
+        runner.invoke(
+            cli,
+            ["install", "anthropics/skills", "--skill", "pdf", "-t", "cursor", "-y"],
+        )
+
+        # Confirm synced
+        r1 = runner.invoke(cli, ["status"])
+        assert "synced" in r1.output.lower()
+
+        # Delete the skill file that was written
+        rules_dir = tmp_path / ".cursor" / "rules"
+        skill_files = list(rules_dir.glob("*.mdc"))
+        assert skill_files, "no skill files written by install"
+        skill_files[0].unlink()
+
+        r2 = runner.invoke(cli, ["status"])
+        assert "out of sync" in r2.output.lower()
+
+    def test_status_shows_synced_for_install_target(self, runner, cli, tmp_path, monkeypatch):
+        """apc install -t cursor writes files immediately; status shows synced without apc sync."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        (tmp_path / ".cursor").mkdir()
+
+        runner.invoke(
+            cli,
+            ["install", "anthropics/skills", "--skill", "pdf", "-t", "cursor", "-y"],
+        )
+
+        result = runner.invoke(cli, ["status"])
+        assert result.exit_code == 0, result.output
+        assert "synced" in result.output.lower()
+        # Manifest recorded the file
+        manifest_path = tmp_path / ".apc" / "manifests" / "cursor.json"
+        assert manifest_path.exists()
+
 
 # ---------------------------------------------------------------------------
 # Phase 3: apc collect
