@@ -58,10 +58,10 @@ Claude Code, Cursor, Gemini CLI, GitHub Copilot, Windsurf, and OpenClaw.
 pip install git+https://github.com/FZ2000/apc-cli.git
 ```
 
-### One-liner (requires [GitHub CLI](https://cli.github.com/))
+### One-liner
 
 ```bash
-bash <(gh api repos/FZ2000/apc-cli/contents/install.sh --jq '.content' | base64 -d)
+curl -fsSL https://raw.githubusercontent.com/FZ2000/apc-cli/main/install.sh | bash
 ```
 
 This clones the repo to `~/.apc-cli`, creates a venv, and symlinks `apc` into `~/.local/bin`.
@@ -145,16 +145,32 @@ apc configure
 | `apc marketplace add <source>` | Add a GitHub repo or local directory |
 | `apc marketplace delete <source>` | Remove a marketplace source |
 
+### Export / Import
+
+| Command | Description |
+|---------|-------------|
+| `apc export [path]` | Export configs to a portable directory with age-encrypted secrets |
+| `apc import [path]` | Import configs from an export directory, decrypting secrets |
+
+**Options:**
+
+| Flag | Description |
+|------|-------------|
+| `--no-secrets` | Skip secret encryption/decryption |
+| `--yes`, `-y` | Skip confirmation prompts |
+
+**Workflow:** export on machine A, commit the directory to a private repo, pull on machine B, import. Transfer `~/.apc/age-identity.txt` (private key) to the target machine once via a secure channel. Secrets stay safe even if the repo becomes public.
+
 ### LLM Configuration
 
 | Command | Description |
 |---------|-------------|
 | `apc configure` | Interactive LLM provider setup wizard |
-| `apc models status` | Show default model and auth profiles |
-| `apc models list` | List configured providers and models |
-| `apc models set <provider/model>` | Set the default model |
-| `apc models auth add` | Add an auth profile |
-| `apc models auth remove <key>` | Remove an auth profile |
+| `apc model status` | Show default model and auth profiles |
+| `apc model list` | List configured providers and models |
+| `apc model set <provider/model>` | Set the default model |
+| `apc model auth add` | Add an auth profile |
+| `apc model auth remove <key>` | Remove an auth profile |
 
 ## How It Works
 

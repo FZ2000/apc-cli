@@ -4,6 +4,7 @@ import click
 
 from cache import load_local_bundle
 from collect import collect
+from export_import import export_cmd, import_cmd
 from install import install
 from llm_config import configure_cmd, models_cmd
 from mcp import mcp
@@ -62,6 +63,10 @@ cli.add_command(mcp)
 # LLM configuration
 cli.add_command(configure_cmd)
 cli.add_command(models_cmd)
+
+# Export / Import
+cli.add_command(export_cmd)
+cli.add_command(import_cmd)
 
 
 @cli.command()

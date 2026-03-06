@@ -3,13 +3,26 @@
 Used by `apc sync`, `apc skill sync`, `apc memory sync`, and `apc mcp sync`.
 """
 
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from appliers import get_applier
 from cache import load_local_bundle, load_mcp_servers
 from extractors import detect_installed_tools
+from secrets_manager import retrieve_secret
 from skills import get_skills_dir
 from ui import error, numbered_selection, success, warning
+
+
+def _resolve_all_mcp_secrets(mcp_servers: List[Dict]) -> Dict[str, str]:
+    """Collect all secret_placeholders from MCP servers and resolve from keychain."""
+    secrets: Dict[str, str] = {}
+    for srv in mcp_servers:
+        for key in srv.get("secret_placeholders", []):
+            if key not in secrets:
+                value = retrieve_secret("local", key)
+                if value:
+                    secrets[key] = value
+    return secrets
 
 
 def _discover_installed_skills() -> List[dict]:
@@ -113,7 +126,8 @@ def sync_mcp(tool_list: List[str], override: bool = False) -> int:
             applier = get_applier(tool_name)
             manifest = applier.get_manifest()
 
-            m = applier.apply_mcp_servers(mcp_servers, {}, manifest, override=override)
+            secrets = _resolve_all_mcp_secrets(mcp_servers)
+            m = applier.apply_mcp_servers(mcp_servers, secrets, manifest, override=override)
             # Prune orphaned MCP servers (keep skill names empty — not our concern)
             applier.prune([], current_mcp_names, manifest)
             manifest.save()
@@ -186,7 +200,8 @@ def sync_all(tool_list: List[str], no_memory: bool = False, override_mcp: bool =
             lk = applier.link_skills(installed_skills, skills_dir, manifest)
 
             # MCP servers
-            m = applier.apply_mcp_servers(mcp_servers, {}, manifest, override=override_mcp)
+            secrets = _resolve_all_mcp_secrets(mcp_servers)
+            m = applier.apply_mcp_servers(mcp_servers, secrets, manifest, override=override_mcp)
 
             # Memory
             mem = 0

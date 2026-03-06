@@ -8,6 +8,7 @@ dependencies = [
     "click>=8.1.0",
     "httpx>=0.27.0",
     "keyring>=25.0.0",
+    "pyrage>=1.0.0",
     "pyyaml>=6.0",
     "rich>=13.0.0",
 ]
@@ -28,10 +29,10 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools]
 package-dir = {"" = "src"}
 py-modules = [
-    "cache", "collect", "config", "frontmatter_parser",
-    "llm_client", "llm_config", "main",
-    "mcp", "memory", "secrets_manager",
-    "install", "skill", "skills", "status", "sync_helpers", "ui",
+    "cache", "collect", "config", "export_import",
+    "frontmatter_parser", "install", "llm_client", "llm_config",
+    "main", "mcp", "memory", "secrets_manager",
+    "skill", "skills", "status", "sync_helpers", "ui",
 ]
 packages = ["extractors", "appliers"]
 
