@@ -107,5 +107,12 @@ def merge_memory(existing: List[Dict], new: List[Dict]) -> List[Dict]:
     return list(index.values())
 
 
-def _key_mcp(s: Dict) -> tuple:
-    return (s.get("source_tool", ""), s.get("name", ""))
+def _key_mcp(s: Dict) -> str:
+    """Deduplicate MCP servers by name only.
+
+    The same logical MCP server can be collected from multiple tools
+    (e.g. a shared server configured in both Claude and Cursor). Keying
+    by name alone ensures we keep one canonical entry (last collected wins)
+    instead of accumulating one entry per source tool.
+    """
+    return s.get("name", "")
