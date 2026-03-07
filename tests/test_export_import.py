@@ -311,7 +311,7 @@ class TestExportCommand(unittest.TestCase):
 
     @patch("export_import._check_pyrage", return_value=False)
     def test_export_fails_loudly_without_pyrage(self, _mock_pyrage):
-        """Without pyrage and without --no-secrets, export must abort (not silently export plaintext)."""
+        """Without pyrage and --no-secrets unset, export must abort — no silent plaintext."""
         from click.testing import CliRunner
 
         runner = CliRunner()
