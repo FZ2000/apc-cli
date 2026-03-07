@@ -1,6 +1,6 @@
 [project]
 name = "apc-cli"
-version = "0.1.0"
+version = "0.1.1"
 description = "AI Personal Context — sync AI agent configs across machines and tools"
 readme = "README.md"
 requires-python = ">=3.12"
