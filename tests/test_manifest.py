@@ -251,3 +251,61 @@ class TestToolSyncStatus(unittest.TestCase):
             side_effect=lambda name: ToolManifest(name, path=self.manifest_path),
         ):
             assert _tool_sync_status("cursor") == "out of sync"
+
+    # -- memory path tests (B1 regression) --------------------------------
+
+    def test_synced_when_memory_file_present(self):
+        """Memory file recorded in manifest and present on disk → synced.
+
+        Regression: the old code iterated _data["memory"].values() treating
+        the flat memory dict as a dict-of-dicts, causing AttributeError on
+        str.get().  This test would crash before the fix.
+        """
+        from status import _tool_sync_status
+
+        memory_file = self.tmpdir / "CLAUDE.md"
+        memory_file.write_text("# My context")
+
+        m = self._make_manifest()
+        m.record_memory(file_path=str(memory_file), content="# My context", entry_ids=[])
+        m.save()
+
+        with unittest.mock.patch(
+            "status.ToolManifest",
+            side_effect=lambda name: ToolManifest(name, path=self.manifest_path),
+        ):
+            assert _tool_sync_status("cursor") == "synced"
+
+    def test_out_of_sync_when_memory_file_deleted(self):
+        """Memory file recorded but deleted from disk → out of sync."""
+        from status import _tool_sync_status
+
+        memory_file = self.tmpdir / "CLAUDE.md"
+        memory_file.write_text("# My context")
+
+        m = self._make_manifest()
+        m.record_memory(file_path=str(memory_file), content="# My context", entry_ids=[])
+        m.save()
+
+        memory_file.unlink()  # simulate deletion
+
+        with unittest.mock.patch(
+            "status.ToolManifest",
+            side_effect=lambda name: ToolManifest(name, path=self.manifest_path),
+        ):
+            assert _tool_sync_status("cursor") == "out of sync"
+
+    def test_synced_when_memory_not_yet_recorded(self):
+        """Manifest exists (MCP synced) but no memory recorded → synced (not out of sync)."""
+        from status import _tool_sync_status
+
+        m = self._make_manifest()
+        m.record_mcp_server("filesystem")
+        m.save()
+        # memory dict is empty {} at this point
+
+        with unittest.mock.patch(
+            "status.ToolManifest",
+            side_effect=lambda name: ToolManifest(name, path=self.manifest_path),
+        ):
+            assert _tool_sync_status("cursor") == "synced"
