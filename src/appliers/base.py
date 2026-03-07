@@ -104,6 +104,7 @@ class BaseApplier(ABC):
             raw_name = skill.get("name", "unnamed")
             try:
                 from skills import sanitize_skill_name
+
                 name = sanitize_skill_name(raw_name)
             except (ValueError, ImportError):
                 warning(f"Skipping skill with invalid name: {raw_name!r}")
