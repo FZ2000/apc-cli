@@ -4,7 +4,6 @@ Handles the `apc install owner/repo` command and all its options.
 """
 
 import re
-from typing import List
 
 import click
 
@@ -52,56 +51,23 @@ def _validate_branch(branch: str) -> None:
 _AGENTS = ["claude-code", "cursor", "gemini-cli", "github-copilot", "openclaw", "windsurf"]
 
 
-def _resolve_targets(target_args: tuple, yes: bool) -> List[str]:
-    """Resolve target targets from -a flags, '*', or interactive selection."""
-    if not target_args:
-        detected = detect_installed_tools()
-        if not detected:
-            click.echo("No AI tools detected on this machine.", err=True)
-            return []
-        if yes:
-            return detected
-        click.echo("\nDetected tools:")
-        for i, t in enumerate(detected, 1):
-            click.echo(f"  {i}. {t}")
-        raw = click.prompt("Install to (e.g. 1,3 or 'all')", default="all")
-        if raw.strip().lower() == "all":
-            return detected
-        indices = []
-        for part in raw.split(","):
-            part = part.strip()
-            if "-" in part:
-                a, b = part.split("-", 1)
-                indices.extend(range(int(a) - 1, int(b)))
-            elif part.isdigit():
-                indices.append(int(part) - 1)
-        return [detected[i] for i in indices if 0 <= i < len(detected)]
+def _propagate_to_synced_tools(skill_name: str) -> None:
+    """Push a newly installed skill to every tool that has been synced.
 
-    targets = list(target_args)
-    if "*" in targets:
-        return detect_installed_tools()
-    return targets
+    Skills always land in ~/.apc/skills/ regardless of --tool flags.
+    This function ensures all synced tools see the new skill:
 
-
-def _propagate_to_synced_tools(skill_name: str, explicit_targets: list) -> None:
-    """Push a newly installed skill to all tools that have been synced.
-
-    - Dir-symlink tools: no-op (symlink already makes the skill live).
-    - Windsurf: regenerates global_rules.md skills section.
+    - Dir-symlink tools (Claude Code, OpenClaw, Gemini, Cursor): no-op —
+      the dir symlink already makes the new skill live immediately.
+    - Windsurf: regenerates the ## APC Skills block in global_rules.md.
     - Copilot: creates ~/.github/instructions/<name>.instructions.md symlink.
-
-    Only runs for tools that are already synced (have a manifest with last_sync_at).
-    Skips tools that were explicitly targeted by this install (already handled).
     """
     from appliers.manifest import ToolManifest
-    from extractors import detect_installed_tools
 
     for tool_name in detect_installed_tools():
-        if tool_name in explicit_targets:
-            continue
         manifest = ToolManifest(tool_name)
         if manifest.is_first_sync:
-            continue  # not yet synced — skip
+            continue  # never synced — skip
         try:
             applier = get_applier(tool_name)
             applier.apply_installed_skill(skill_name)
@@ -115,13 +81,6 @@ def _propagate_to_synced_tools(skill_name: str, explicit_targets: list) -> None:
     "--skill", "-s", "skills", multiple=True, help="Skill name(s) to install. Use '*' for all."
 )
 @click.option("--all", "install_all", is_flag=True, help="Install all skills from the repo.")
-@click.option(
-    "--target",
-    "-t",
-    "targets",
-    multiple=True,
-    help="Target tool(s) to install to. Use '*' for all detected.",
-)
 @click.option("--branch", default="main", show_default=True, help="Git branch to fetch from.")
 @click.option(
     "--list",
@@ -130,8 +89,11 @@ def _propagate_to_synced_tools(skill_name: str, explicit_targets: list) -> None:
     help="List available skills in the repo without installing.",
 )
 @click.option("-y", "--yes", is_flag=True, help="Non-interactive: skip all confirmation prompts.")
-def install(repo, skills, install_all, targets, branch, list_only, yes):
+def install(repo, skills, install_all, branch, list_only, yes):
     """Install skills from a GitHub repository.
+
+    Skills are saved to ~/.apc/skills/ and automatically propagated to every
+    tool that has been synced via `apc sync`.
 
     \b
     Examples:
@@ -140,8 +102,7 @@ def install(repo, skills, install_all, targets, branch, list_only, yes):
       apc install owner/repo --skill frontend-design --skill skill-creator
       apc install owner/repo --skill '*'
       apc install owner/repo --all
-      apc install owner/repo --skill frontend-design -t claude-code -t cursor
-      apc install owner/repo --all -t claude-code -y
+      apc install owner/repo --all -y
     """
     # Validate: repo must look like owner/repo with safe characters
     if repo.startswith("http"):
@@ -202,16 +163,10 @@ def install(repo, skills, install_all, targets, branch, list_only, yes):
         click.echo("No skills selected.", err=True)
         return
 
-    # Resolve target targets
-    target_list = _resolve_targets(targets, yes)
-    if not target_list:
-        return
-
     # Confirm plan
     if not yes:
         click.echo(f"\nInstall {len(skill_names)} skill(s) from {repo}")
         click.echo(f"  Skills: {', '.join(skill_names)}")
-        click.echo(f"  To:     {', '.join(target_list)}")
         if not click.confirm("\nProceed?", default=True):
             click.echo("Cancelled.")
             return
@@ -242,7 +197,7 @@ def install(repo, skills, install_all, targets, branch, list_only, yes):
         save_skill_file(skill["name"], raw_content)
 
         # Apply directly to each target target
-        _propagate_to_synced_tools(skill["name"], target_list)
+        _propagate_to_synced_tools(skill["name"])
 
         # Save metadata to local cache
         existing = load_skills()
@@ -253,6 +208,6 @@ def install(repo, skills, install_all, targets, branch, list_only, yes):
         click.echo(" ✓")
 
     if installed_skills:
-        click.echo(f"\n✓ Installed {len(installed_skills)} skill(s) to {', '.join(target_list)}")
+        click.echo(f"\n✓ Installed {len(installed_skills)} skill(s) to ~/.apc/skills/")
     else:
         click.echo("\nNo skills were installed.")
