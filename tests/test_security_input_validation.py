@@ -15,62 +15,79 @@ class TestRepoValidation(unittest.TestCase):
         import importlib
 
         import install as _install_module
+
         importlib.reload(_install_module)
 
     def _validate_repo(self, repo):
         from install import _validate_repo
+
         return _validate_repo(repo)
 
     def _validate_branch(self, branch):
         from install import _validate_branch
+
         return _validate_branch(branch)
 
     def test_valid_repo_passes(self):
         from install import _validate_repo
+
         _validate_repo("owner/repo")
         _validate_repo("my-org/my-repo")
         _validate_repo("FZ2000/apc-cli")
 
     def test_url_repo_raises(self):
         import click
+
         with self.assertRaises(click.UsageError):
             from install import _validate_repo
+
             _validate_repo("https://github.com/owner/repo")
 
     def test_path_traversal_repo_raises(self):
         import click
+
         with self.assertRaises(click.UsageError):
             from install import _validate_repo
+
             _validate_repo("../../etc/passwd")
 
     def test_double_dot_in_repo_raises(self):
         import click
+
         with self.assertRaises(click.UsageError):
             from install import _validate_repo
+
             _validate_repo("owner/../evil/repo")
 
     def test_valid_branch_passes(self):
         from install import _validate_branch
+
         _validate_branch("main")
         _validate_branch("feature/my-branch")
         _validate_branch("release-1.0.0")
 
     def test_path_traversal_branch_raises(self):
         import click
+
         with self.assertRaises(click.UsageError):
             from install import _validate_branch
+
             _validate_branch("../../etc/passwd")
 
     def test_semicolon_in_branch_raises(self):
         import click
+
         with self.assertRaises(click.UsageError):
             from install import _validate_branch
+
             _validate_branch("main;rm -rf /")
 
     def test_double_dot_branch_raises(self):
         import click
+
         with self.assertRaises(click.UsageError):
             from install import _validate_branch
+
             _validate_branch("main/../evil")
 
 
@@ -80,6 +97,7 @@ class TestImportSkillSanitization(unittest.TestCase):
     def test_sanitize_strips_traversal(self):
         """sanitize_skill_name should strip path-traversal components (takes basename)."""
         from skills import sanitize_skill_name
+
         # Path traversal is stripped to basename, which is then validated
         # "../../etc" -> basename "etc" which is valid
         self.assertEqual(sanitize_skill_name("../../etc"), "etc")
@@ -91,6 +109,7 @@ class TestImportSkillSanitization(unittest.TestCase):
 
     def test_normal_names_pass(self):
         from skills import sanitize_skill_name
+
         self.assertEqual(sanitize_skill_name("my-skill"), "my-skill")
         self.assertEqual(sanitize_skill_name("skill_name"), "skill_name")
 
@@ -160,6 +179,7 @@ class TestRedirectPrevention(unittest.TestCase):
 
         with patch("skills.httpx.get", side_effect=mock_get):
             from skills import list_skills_in_repo
+
             list_skills_in_repo("owner/repo", "main")
 
         self.assertEqual(len(calls), 1)
@@ -181,6 +201,7 @@ class TestRedirectPrevention(unittest.TestCase):
 
         with patch("skills.httpx.get", side_effect=mock_get):
             from skills import fetch_skill_from_repo
+
             fetch_skill_from_repo("owner/repo", "my-skill", "main")
 
         self.assertEqual(len(calls), 1)

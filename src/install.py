@@ -48,6 +48,7 @@ def _validate_branch(branch: str) -> None:
     if ".." in branch:
         raise click.UsageError(f"Branch name {branch!r} contains disallowed path traversal.")
 
+
 _AGENTS = ["claude-code", "cursor", "gemini-cli", "github-copilot", "openclaw", "windsurf"]
 
 
