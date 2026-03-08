@@ -18,6 +18,11 @@ def _copilot_instructions_dir() -> Path:
     return Path.cwd() / ".github" / "instructions"
 
 
+def _copilot_global_instructions_dir() -> Path:
+    """User-global instructions dir — applies across all projects via VS Code."""
+    return Path.home() / ".github" / "instructions"
+
+
 def _vscode_mcp_json() -> Path:
     return Path.cwd() / ".vscode" / "mcp.json"
 
@@ -87,6 +92,7 @@ language or path-specific rules.
 
 class CopilotApplier(BaseApplier):
     TOOL_NAME = "github-copilot"
+    SYNC_METHOD = "per-file-symlink"
     MEMORY_SCHEMA = COPILOT_MEMORY_SCHEMA
 
     @property  # type: ignore[override]
@@ -95,6 +101,73 @@ class CopilotApplier(BaseApplier):
         # Using the resolved CWD ensures a stable absolute path even if the
         # calling process later changes directory (#42).
         return Path.cwd().resolve()
+
+    def _global_instructions_dir(self) -> Path:
+        return _copilot_global_instructions_dir()
+
+    def sync_skills_dir(self) -> bool:  # type: ignore[override]
+        """Create per-skill .instructions.md symlinks in ~/.github/instructions/.
+
+        Copilot reads each <name>.instructions.md in the instructions dir.
+        We symlink: ~/.github/instructions/<name>.instructions.md →
+                    ~/.apc/skills/<name>/SKILL.md
+        so each skill's content is served as a Copilot instruction.
+        """
+        from skills import get_skills_dir
+
+        instr_dir = self._global_instructions_dir()
+        instr_dir.mkdir(parents=True, exist_ok=True)
+        skills_dir = get_skills_dir()
+
+        if not skills_dir.exists():
+            return True  # nothing to link yet; will populate on first apc install
+
+        for skill_path in skills_dir.iterdir():
+            skill_md = skill_path / "SKILL.md"
+            if not skill_md.exists():
+                continue
+            self._link_skill(skill_path.name, skill_md, instr_dir)
+
+        return True
+
+    def apply_installed_skill(self, name: str) -> bool:  # type: ignore[override]
+        """Create a symlink for a newly installed skill."""
+        from skills import get_skills_dir
+
+        skill_md = get_skills_dir() / name / "SKILL.md"
+        if not skill_md.exists():
+            return False
+        instr_dir = self._global_instructions_dir()
+        instr_dir.mkdir(parents=True, exist_ok=True)
+        self._link_skill(name, skill_md, instr_dir)
+        return True
+
+    def remove_installed_skill(self, name: str) -> bool:  # type: ignore[override]
+        """Remove the dangling .instructions.md symlink for an uninstalled skill."""
+        link = self._global_instructions_dir() / f"{name}.instructions.md"
+        if link.is_symlink():
+            link.unlink()
+            return True
+        return False
+
+    def unsync_skills(self) -> bool:  # type: ignore[override]
+        """Remove all apc-managed .instructions.md symlinks from ~/.github/instructions/."""
+        instr_dir = self._global_instructions_dir()
+        if not instr_dir.exists():
+            return False
+        removed = 0
+        for link in instr_dir.glob("*.instructions.md"):
+            if link.is_symlink():
+                link.unlink()
+                removed += 1
+        return removed > 0
+
+    @staticmethod
+    def _link_skill(name: str, skill_md: Path, instr_dir: Path) -> None:
+        link_path = instr_dir / f"{name}.instructions.md"
+        if link_path.is_symlink() or link_path.exists():
+            link_path.unlink()
+        os.symlink(skill_md.resolve(), link_path)
 
     def apply_skills(self, skills: List[Dict], manifest: ToolManifest) -> int:
         count = 0

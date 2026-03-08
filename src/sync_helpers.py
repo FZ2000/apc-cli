@@ -71,12 +71,12 @@ def sync_skills(tool_list: List[str]) -> Tuple[int, int]:
     """Establish skill links for all tools. Returns (dir_linked_count, skill_linked_count).
 
     ~/.apc/skills/ is the single source of truth for all skills (installed and collected).
-    Two strategies depending on whether the tool's skills dir is exclusively apc-managed:
+    Three strategies depending on the tool:
 
-    - SKILL_DIR_EXCLUSIVE=True (OpenClaw, Claude Code): replace the entire skills dir
-      with a single symlink → ~/.apc/skills/. Future installs are live immediately.
-    - SKILL_DIR_EXCLUSIVE=False (Cursor, Copilot): create per-skill symlinks inside
-      the tool's mixed dir. Re-run sync after new installs to pick them up.
+    - Dir-symlink (OpenClaw, Claude Code, Gemini, Cursor): replace the tool's skills
+      dir with a single symlink → ~/.apc/skills/. Future installs are live immediately.
+    - Injection (Windsurf): maintain an APC Skills block in global_rules.md.
+    - Per-file symlinks (Copilot): create <name>.instructions.md → SKILL.md symlinks.
     """
     skills_dir = get_skills_dir()
 
@@ -88,12 +88,18 @@ def sync_skills(tool_list: List[str]) -> Tuple[int, int]:
             manifest = applier.get_manifest()
 
             if applier.sync_skills_dir():
-                manifest.record_dir_sync(str(applier.SKILL_DIR), str(skills_dir))
+                if applier.SKILL_DIR is not None:
+                    # Dir-symlink tools: record the symlink target
+                    manifest.record_dir_sync(str(applier.SKILL_DIR), str(skills_dir))
+                    success(f"{tool_name}: skills dir symlinked → ~/.apc/skills/")
+                else:
+                    # Tool-specific sync (injection or per-file symlinks)
+                    manifest.record_tool_sync(applier.SYNC_METHOD)
+                    success(f"{tool_name}: skills synced ({applier.SYNC_METHOD})")
                 manifest.save()
                 total_dir += 1
-                success(f"{tool_name}: skills dir symlinked → ~/.apc/skills/")
             else:
-                success(f"{tool_name}: no skills dir (SKILL_DIR=None) — skipping")
+                success(f"{tool_name}: no skills dir configured — skipping")
 
         except Exception as e:
             error(f"Failed to sync skills to {tool_name}: {e}")

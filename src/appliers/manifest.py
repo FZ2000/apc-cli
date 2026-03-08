@@ -67,8 +67,21 @@ class ToolManifest:
         self._data["dir_sync"] = {
             "skill_dir": skill_dir,
             "target": target,
+            "sync_method": "dir-symlink",
             "synced_at": _now_iso(),
         }
+
+    def record_tool_sync(self, sync_method: str) -> None:
+        """Record a tool-specific sync (injection or per-file symlinks)."""
+        self._data["dir_sync"] = {
+            "sync_method": sync_method,
+            "synced_at": _now_iso(),
+        }
+
+    @property
+    def sync_method(self) -> str | None:
+        """Return the sync method recorded for this tool, or None if never synced."""
+        return (self._data.get("dir_sync") or {}).get("sync_method")
 
     @property
     def is_first_sync(self) -> bool:
