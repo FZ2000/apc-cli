@@ -83,20 +83,27 @@ def _resolve_targets(target_args: tuple, yes: bool) -> List[str]:
     return targets
 
 
-def _apply_skill_to_targets(skill: dict, target_list: list) -> int:
-    """Write a skill directly to each target's skill directory. Returns applied count."""
+def _note_per_skill_tools(target_list: list) -> None:
+    """Warn if any synced target uses per-skill symlinks (not dir-level).
 
-    count = 0
+    For SKILL_DIR_EXCLUSIVE tools (OpenClaw, Claude Code), the dir symlink is
+    already live — new skills in ~/.apc/skills/ appear immediately.
+    For mixed-dir tools (Cursor, Copilot), the user must re-run `apc sync`.
+    """
+    needs_sync = []
     for target_name in target_list:
         try:
             applier = get_applier(target_name)
-            manifest = applier.get_manifest()
-            applied = applier.apply_skills([skill], manifest)
-            manifest.save()
-            count += applied
-        except Exception as e:
-            click.echo(f"  ! {target_name}: {e}", err=True)
-    return count
+            if not applier.SKILL_DIR_EXCLUSIVE and applier.SKILL_DIR is not None:
+                needs_sync.append(target_name)
+        except Exception:
+            pass
+    if needs_sync:
+        click.echo(
+            f"  ℹ {', '.join(needs_sync)}: run `apc sync` to link this skill "
+            "(per-skill symlinks — dir-level not supported for mixed skill dirs)",
+            err=True,
+        )
 
 
 @click.command()
@@ -232,7 +239,7 @@ def install(repo, skills, install_all, targets, branch, list_only, yes):
         save_skill_file(skill["name"], raw_content)
 
         # Apply directly to each target target
-        _apply_skill_to_targets(skill, target_list)
+        _note_per_skill_tools(target_list)
 
         # Save metadata to local cache
         existing = load_skills()

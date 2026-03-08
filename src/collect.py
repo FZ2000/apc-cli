@@ -12,16 +12,15 @@ import click
 from cache import (
     load_mcp_servers,
     load_memory,
-    load_skills,
     merge_mcp_servers,
     merge_memory,
-    merge_skills,
     save_mcp_servers,
     save_memory,
-    save_skills,
 )
 from extractors import detect_installed_tools, get_extractor
+from frontmatter_parser import render_frontmatter
 from secrets_manager import detect_and_redact, store_secrets_batch
+from skills import save_skill_file
 from ui import (
     cache_summary_table,
     display_memory_files,
@@ -198,16 +197,24 @@ def collect(tools, no_memory, dry_run, yes):
         info("\n[dry-run] No files written.")
         return
 
-    # Merge into existing cache (upsert, never delete)
-    merged_skills = merge_skills(load_skills(), new_skills)
+    # Write collected skills to ~/.apc/skills/<name>/SKILL.md (source of truth)
+    # Skills are never stored inline in the cache — ~/.apc/skills/ is canonical.
+    for skill in new_skills:
+        name = skill.get("name", "unnamed")
+        metadata = {k: skill[k] for k in ("name", "description", "tags", "version") if skill.get(k)}
+        raw_content = render_frontmatter(metadata, skill.get("body", ""))
+        try:
+            save_skill_file(name, raw_content)
+        except ValueError as exc:
+            warning(f"Skipping skill {name!r}: {exc}")
+
     merged_mcp = merge_mcp_servers(load_mcp_servers(), new_mcp_servers)
     merged_memory = merge_memory(load_memory(), selected_memory)
 
-    save_skills(merged_skills)
     save_mcp_servers(merged_mcp)
     save_memory(merged_memory)
 
     cache_summary_table(
-        len(merged_skills), len(merged_mcp), len(merged_memory), title="Local Cache Updated"
+        len(new_skills), len(merged_mcp), len(merged_memory), title="Local Cache Updated"
     )
     success("Collection complete.")
