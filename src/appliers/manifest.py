@@ -57,8 +57,17 @@ class ToolManifest:
             "last_sync_at": None,
             "skills": {},
             "linked_skills": {},
+            "dir_sync": None,
             "mcp_servers": {},
             "memory": {},
+        }
+
+    def record_dir_sync(self, skill_dir: str, target: str) -> None:
+        """Record a dir-level symlink: skill_dir → target (~/.apc/skills/)."""
+        self._data["dir_sync"] = {
+            "skill_dir": skill_dir,
+            "target": target,
+            "synced_at": _now_iso(),
         }
 
     @property

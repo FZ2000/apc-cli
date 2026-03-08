@@ -12,10 +12,13 @@ import click
 from cache import (
     load_mcp_servers,
     load_memory,
+    load_skills,
     merge_mcp_servers,
     merge_memory,
+    merge_skills,
     save_mcp_servers,
     save_memory,
+    save_skills,
 )
 from extractors import detect_installed_tools, get_extractor
 from frontmatter_parser import render_frontmatter
@@ -175,9 +178,18 @@ def collect(tools, no_memory, yes):
 
     merged_mcp = merge_mcp_servers(load_mcp_servers(), new_mcp_servers)
     merged_memory = merge_memory(load_memory(), selected_memory)
+    # Keep skills.json as a metadata index (name, description, tags — no body)
+    # so `apc skill list` and other commands can enumerate skills without
+    # reading every SKILL.md. Body lives in ~/.apc/skills/<name>/SKILL.md.
+    skill_index = [
+        {k: s[k] for k in ("name", "description", "tags", "version", "source_tool") if k in s}
+        for s in new_skills
+    ]
+    merged_index = merge_skills(load_skills(), skill_index)
 
     save_mcp_servers(merged_mcp)
     save_memory(merged_memory)
+    save_skills(merged_index)
 
     cache_summary_table(
         len(new_skills), len(merged_mcp), len(merged_memory), title="Local Cache Updated"

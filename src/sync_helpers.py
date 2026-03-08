@@ -92,6 +92,7 @@ def sync_skills(tool_list: List[str]) -> Tuple[int, int]:
 
             if applier.sync_skills_dir():
                 # Dir-level symlink established — entire ~/.apc/skills/ is live
+                manifest.record_dir_sync(str(applier.SKILL_DIR), str(skills_dir))
                 total_dir += 1
                 success(f"{tool_name}: skills dir symlinked → ~/.apc/skills/")
             elif installed_skills:
@@ -202,6 +203,7 @@ def sync_all(tool_list: List[str], no_memory: bool = False, override_mcp: bool =
 
             # Establish skill link (dir-level or per-skill depending on tool)
             if applier.sync_skills_dir():
+                manifest.record_dir_sync(str(applier.SKILL_DIR), str(skills_dir))
                 s, lk = 1, 0  # dir symlink counts as 1
             else:
                 s = 0
