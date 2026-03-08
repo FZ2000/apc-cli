@@ -72,8 +72,13 @@ class BaseApplier(ABC):
 
     # Subclasses MUST override this with the directory the LLM is allowed to
     # write memory files into.  apply_memory_via_llm() rejects any path that
-    # does not resolve inside this directory.  Defaults to Path.home() as a
-    # minimum guard; narrow it in each applier.
+    # does not resolve inside this directory.
+    #
+    # Subclasses that set MEMORY_SCHEMA MUST also override MEMORY_ALLOWED_BASE
+    # to a narrow directory (e.g. ~/.claude, ~/.cursor).  The base class
+    # raises RuntimeError if MEMORY_SCHEMA is non-empty and MEMORY_ALLOWED_BASE
+    # is still None — this prevents accidental whole-home writes when a new
+    # applier forgets to set the guard.
     MEMORY_ALLOWED_BASE: Optional[Path] = None
 
     def get_manifest(self) -> ToolManifest:
@@ -163,6 +168,17 @@ class BaseApplier(ABC):
         if not collected_memory:
             return 0
 
+        # Guard: subclasses MUST override MEMORY_ALLOWED_BASE when they set
+        # MEMORY_SCHEMA.  Fail loudly here (before any LLM call) so a missing
+        # override is caught at the start of the sync, not after an expensive
+        # network round-trip (#37).
+        if self.MEMORY_ALLOWED_BASE is None:
+            raise RuntimeError(
+                f"{self.__class__.__name__} sets MEMORY_SCHEMA but did not override "
+                "MEMORY_ALLOWED_BASE.  Set MEMORY_ALLOWED_BASE to a narrow directory "
+                "(e.g. Path.home() / '.claude') to restrict LLM-driven file writes."
+            )
+
         # Try to import and call LLM
         try:
             from llm_client import call_llm
@@ -226,9 +242,9 @@ class BaseApplier(ABC):
             warning(f"Raw LLM response: {response[:500]}")
             return 0
 
-        # Determine the allowed write root for this applier.
-        # Resolving at call-time so tests can monkeypatch Path.home().
-        allowed_base = (self.MEMORY_ALLOWED_BASE or Path.home()).resolve()
+        # Resolve at call-time so tests can monkeypatch Path.home() or the property.
+        # (MEMORY_ALLOWED_BASE is guaranteed non-None by the guard above.)
+        allowed_base = self.MEMORY_ALLOWED_BASE.resolve()
 
         # Write files
         count = 0
@@ -240,10 +256,11 @@ class BaseApplier(ABC):
             if not file_path or content is None:
                 continue
 
-            # Security: resolve the path (collapses `..`) and assert it lands
-            # inside the allowed base directory.  Rejects prompt-injection or
-            # hallucinated paths like /etc/cron.d/evil.
-            resolved = Path(file_path).resolve()
+            # Security: expand ~ and resolve (collapses `..`), then assert the
+            # path lands inside the allowed base directory.  Rejects
+            # prompt-injection or hallucinated paths like /etc/cron.d/evil,
+            # and also handles LLM output that uses "~/" tilde notation (#38).
+            resolved = Path(file_path).expanduser().resolve()
             if not str(resolved).startswith(str(allowed_base) + "/") and resolved != allowed_base:
                 warning(
                     f"[security] Rejecting LLM-suggested write outside allowed path: "
