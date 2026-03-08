@@ -1027,9 +1027,7 @@ class TestInstallThenSync:
         (tmp_path / ".cursor").mkdir()
         (tmp_path / ".cursor" / "mcp.json").write_text("{}")
 
-        r1 = runner.invoke(
-            cli, ["install", self.TEST_REPO, "--skill", self.KNOWN_SKILL, "-y"]
-        )
+        r1 = runner.invoke(cli, ["install", self.TEST_REPO, "--skill", self.KNOWN_SKILL, "-y"])
         assert r1.exit_code == 0, r1.output
 
         r2 = runner.invoke(cli, ["sync", "--tools", "cursor", "--yes"])
@@ -1046,9 +1044,7 @@ class TestInstallThenSync:
         """Installed skill appears in apc skill list immediately after install."""
         monkeypatch.setenv("HOME", str(tmp_path))
 
-        runner.invoke(
-            cli, ["install", self.TEST_REPO, "--skill", self.KNOWN_SKILL, "-y"]
-        )
+        runner.invoke(cli, ["install", self.TEST_REPO, "--skill", self.KNOWN_SKILL, "-y"])
 
         result = runner.invoke(cli, ["skill", "list"])
         assert result.exit_code == 0
@@ -1116,9 +1112,7 @@ class TestInstallThenSync:
         (tmp_path / ".cursor").mkdir()
         (tmp_path / ".cursor" / "mcp.json").write_text("{}")
 
-        runner.invoke(
-            cli, ["install", self.TEST_REPO, "--skill", self.KNOWN_SKILL, "-y"]
-        )
+        runner.invoke(cli, ["install", self.TEST_REPO, "--skill", self.KNOWN_SKILL, "-y"])
         runner.invoke(cli, ["sync", "--tools", "cursor", "--yes"])
 
         r_status = runner.invoke(cli, ["status"])
