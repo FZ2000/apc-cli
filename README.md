@@ -93,6 +93,17 @@ apc configure
 
 ## Command Reference
 
+### CLI Basics
+
+```bash
+# Check the installed version
+apc --version
+# apc, version 0.1.1
+
+# Run a health check on your environment
+apc doctor
+```
+
 ### Core Workflow
 
 | Command | Description |
@@ -107,6 +118,7 @@ apc configure
 |------|-------------|
 | `--tools <list>` | Comma-separated tool list (e.g., `claude-code,cursor`) |
 | `--no-memory` | Skip collecting memory entries |
+| `--dry-run` | Preview what would be collected without writing |
 | `--yes`, `-y` | Skip confirmation prompts |
 
 **Options for `sync`:**
@@ -117,7 +129,8 @@ apc configure
 | `--all` | Apply to all detected tools without prompting |
 | `--no-memory` | Skip memory entries |
 | `--override-mcp` | Replace existing MCP servers instead of merging |
-| `--dry-run` | Show what would be applied without writing |
+| `--all-sources-mcp` | Broadcast all MCP servers to every tool (ignores source_tool) |
+| `--dry-run` | Show files that would be written without writing |
 | `--yes`, `-y` | Skip confirmation prompts |
 
 ### Skills
@@ -259,6 +272,23 @@ apc configure --provider custom --base-url "http://localhost:11434/v1" \
 ```
 
 **Supported LLM providers:** Anthropic, OpenAI, Google Gemini, Qwen (Alibaba), GLM (Zhipu), MiniMax, Kimi (Moonshot), and any OpenAI-compatible or Anthropic-compatible endpoint.
+
+## Shell Completion
+
+APC is built on [Click](https://click.palletsprojects.com/) which has built-in shell completion support.
+
+```bash
+# Bash — add to ~/.bashrc
+echo 'eval "$(_APC_COMPLETE=bash_source apc)"' >> ~/.bashrc
+
+# Zsh — add to ~/.zshrc
+echo 'eval "$(_APC_COMPLETE=zsh_source apc)"' >> ~/.zshrc
+
+# Fish — add to ~/.config/fish/completions/apc.fish
+echo 'eval (env _APC_COMPLETE=fish_source apc)' >> ~/.config/fish/completions/apc.fish
+```
+
+Reload your shell (`source ~/.bashrc` / `source ~/.zshrc`) after adding the line.
 
 ## Development
 
