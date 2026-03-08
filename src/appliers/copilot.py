@@ -9,6 +9,21 @@ from typing import Dict, List
 from appliers.base import BaseApplier
 from appliers.manifest import ToolManifest
 
+
+def _copilot_instructions() -> Path:
+    return Path.cwd() / ".github" / "copilot-instructions.md"
+
+
+def _copilot_instructions_dir() -> Path:
+    return Path.cwd() / ".github" / "instructions"
+
+
+def _vscode_mcp_json() -> Path:
+    return Path.cwd() / ".vscode" / "mcp.json"
+
+
+# Module-level aliases kept for backward compatibility with extractors
+# (evaluated lazily through the functions above inside the class methods)
 COPILOT_INSTRUCTIONS = Path(".github") / "copilot-instructions.md"
 COPILOT_INSTRUCTIONS_DIR = Path(".github") / "instructions"
 VSCODE_MCP_JSON = Path(".vscode") / "mcp.json"
@@ -76,19 +91,22 @@ class CopilotApplier(BaseApplier):
 
     @property  # type: ignore[override]
     def MEMORY_ALLOWED_BASE(self) -> "Path":  # noqa: N802
-        # Copilot writes to .github/ in the current project directory.
-        return Path.cwd()
+        # Copilot writes to .github/ / .vscode/ in the current project directory.
+        # Using the resolved CWD ensures a stable absolute path even if the
+        # calling process later changes directory (#42).
+        return Path.cwd().resolve()
 
     def apply_skills(self, skills: List[Dict], manifest: ToolManifest) -> int:
         count = 0
+        instructions = _copilot_instructions()
         for skill in skills:
             if skill.get("name") == "copilot-instructions":
-                COPILOT_INSTRUCTIONS.parent.mkdir(parents=True, exist_ok=True)
+                instructions.parent.mkdir(parents=True, exist_ok=True)
                 content = skill.get("body", "")
-                COPILOT_INSTRUCTIONS.write_text(content, encoding="utf-8")
+                instructions.write_text(content, encoding="utf-8")
                 manifest.record_skill(
                     "copilot-instructions",
-                    file_path=str(COPILOT_INSTRUCTIONS.resolve()),
+                    file_path=str(instructions.resolve()),
                     content=content,
                 )
                 count += 1
@@ -101,9 +119,10 @@ class CopilotApplier(BaseApplier):
         manifest: ToolManifest,
         override: bool = False,
     ) -> int:
-        if VSCODE_MCP_JSON.exists():
+        vscode_mcp = _vscode_mcp_json()
+        if vscode_mcp.exists():
             try:
-                data = json.loads(VSCODE_MCP_JSON.read_text(encoding="utf-8"))
+                data = json.loads(vscode_mcp.read_text(encoding="utf-8"))
             except json.JSONDecodeError:
                 data = {}
         else:
@@ -143,7 +162,6 @@ class CopilotApplier(BaseApplier):
             count += 1
 
         data["servers"] = vscode_servers
-        vscode_mcp = Path(VSCODE_MCP_JSON).resolve()
         vscode_mcp.parent.mkdir(parents=True, exist_ok=True)
         vscode_mcp.write_text(json.dumps(data, indent=2), encoding="utf-8")
         # Restrict to owner-only since the file may contain resolved API keys (#32)
@@ -153,16 +171,18 @@ class CopilotApplier(BaseApplier):
     def _read_existing_memory_files(self) -> Dict[str, str]:
         """Return {file_path: content} for Copilot's instruction files."""
         result = {}
-        if COPILOT_INSTRUCTIONS.exists():
+        instructions = _copilot_instructions()
+        instructions_dir = _copilot_instructions_dir()
+        if instructions.exists():
             try:
-                result[str(COPILOT_INSTRUCTIONS)] = COPILOT_INSTRUCTIONS.read_text(encoding="utf-8")
+                result[str(instructions.resolve())] = instructions.read_text(encoding="utf-8")
             except IOError:
                 pass
-        if COPILOT_INSTRUCTIONS_DIR.exists():
-            for path in COPILOT_INSTRUCTIONS_DIR.glob("*.instructions.md"):
+        if instructions_dir.exists():
+            for path in instructions_dir.glob("*.instructions.md"):
                 if path.is_file():
                     try:
-                        result[str(path)] = path.read_text(encoding="utf-8")
+                        result[str(path.resolve())] = path.read_text(encoding="utf-8")
                     except IOError:
                         pass
         return result
