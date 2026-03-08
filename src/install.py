@@ -83,17 +83,22 @@ def _resolve_targets(target_args: tuple, yes: bool) -> List[str]:
     return targets
 
 
-def _apply_skill_to_targets(skill: dict, target_list: list) -> int:
-    """Write a skill directly to each target's skill directory. Returns applied count."""
+def _link_skill_to_targets(skill: dict, target_list: list) -> int:
+    """Symlink a skill from ~/.apc/skills/ into each target's skill directory.
 
+    Uses link_skills() so the tool's skill dir always points back to the
+    canonical source — never a stale copy.
+    Returns number of targets linked.
+    """
+    skills_dir = get_skills_dir()
     count = 0
     for target_name in target_list:
         try:
             applier = get_applier(target_name)
             manifest = applier.get_manifest()
-            applied = applier.apply_skills([skill], manifest)
+            linked = applier.link_skills([skill], skills_dir, manifest)
             manifest.save()
-            count += applied
+            count += linked
         except Exception as e:
             click.echo(f"  ! {target_name}: {e}", err=True)
     return count
@@ -232,7 +237,7 @@ def install(repo, skills, install_all, targets, branch, list_only, yes):
         save_skill_file(skill["name"], raw_content)
 
         # Apply directly to each target target
-        _apply_skill_to_targets(skill, target_list)
+        _link_skill_to_targets(skill, target_list)
 
         # Save metadata to local cache
         existing = load_skills()

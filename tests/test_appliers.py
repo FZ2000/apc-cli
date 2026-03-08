@@ -424,3 +424,62 @@ class TestReadExistingMemoryFiles(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestOpenClawApplier(unittest.TestCase):
+    def setUp(self):
+        self.tmpdir = Path(tempfile.mkdtemp())
+        self.skills_dir = self.tmpdir / ".openclaw" / "skills"
+        self.skills_dir.mkdir(parents=True)
+        self.manifest_path = self.tmpdir / "manifest.json"
+
+    def _manifest(self) -> "ToolManifest":
+        return ToolManifest("openclaw", path=self.manifest_path)
+
+    def _skill(self, name="test-skill"):
+        return {"name": name, "description": "A test skill", "body": "# Test\nDo things."}
+
+    def test_apply_skills_clean_dir(self):
+        """apply_skills writes SKILL.md into a per-skill subdirectory."""
+        manifest = self._manifest()
+        with patch("appliers.openclaw._openclaw_skills_dir", return_value=self.skills_dir):
+            from appliers.openclaw import OpenClawApplier
+
+            applier = OpenClawApplier()
+            count = applier.apply_skills([self._skill()], manifest)
+
+        self.assertEqual(count, 1)
+        skill_md = self.skills_dir / "test-skill" / "SKILL.md"
+        self.assertTrue(skill_md.exists())
+        self.assertIn("test-skill", manifest.managed_skill_names())
+
+    def test_apply_skills_does_not_create_symlinks(self):
+        """apply_skills (collected skills path) always writes real directories, never symlinks.
+
+        Installed skills are linked via link_skills(). apply_skills() is only called
+        for collected skills which have no source directory — so it must create a real dir.
+        """
+        manifest = self._manifest()
+        with patch("appliers.openclaw._openclaw_skills_dir", return_value=self.skills_dir):
+            from appliers.openclaw import OpenClawApplier
+
+            applier = OpenClawApplier()
+            applier.apply_skills([self._skill()], manifest)
+
+        skill_dir = self.skills_dir / "test-skill"
+        self.assertTrue(skill_dir.is_dir())
+        self.assertFalse(skill_dir.is_symlink(), "apply_skills must create a real dir, not a symlink")
+
+    def test_apply_skills_multiple_skills(self):
+        """apply_skills handles multiple skills in one call."""
+        skills = [self._skill("alpha"), self._skill("beta")]
+        manifest = self._manifest()
+        with patch("appliers.openclaw._openclaw_skills_dir", return_value=self.skills_dir):
+            from appliers.openclaw import OpenClawApplier
+
+            applier = OpenClawApplier()
+            count = applier.apply_skills(skills, manifest)
+
+        self.assertEqual(count, 2)
+        self.assertTrue((self.skills_dir / "alpha" / "SKILL.md").exists())
+        self.assertTrue((self.skills_dir / "beta" / "SKILL.md").exists())
