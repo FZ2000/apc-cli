@@ -409,7 +409,7 @@ class TestStatus:
         """Removing a synced skill link/file causes 'out of sync' for that tool.
 
         Skills now live in ~/.apc/skills/ (source of truth).
-        - SKILL_DIR_EXCLUSIVE tools (claude-code, openclaw): their skills dir is a
+        - Tools with SKILL_DIR set (claude-code, openclaw, cursor): their skills dir is a
           single symlink → ~/.apc/skills/. Out-of-sync = symlink removed/broken.
         - Per-skill tools (cursor): individual link_path entries in the manifest.
           Out-of-sync = linked file deleted.

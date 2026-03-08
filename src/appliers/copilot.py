@@ -87,9 +87,6 @@ language or path-specific rules.
 
 class CopilotApplier(BaseApplier):
     TOOL_NAME = "github-copilot"
-    # Copilot has no dedicated skills dir — it uses a single instructions file.
-    # Dir-level symlink is not applicable.
-    SKILL_DIR_EXCLUSIVE = False
     MEMORY_SCHEMA = COPILOT_MEMORY_SCHEMA
 
     @property  # type: ignore[override]
