@@ -68,6 +68,18 @@ def save_skill_file(skill_name: str, raw_content: str) -> Path:
 # ---------------------------------------------------------------------------
 
 
+def _safe_get(url: str, timeout: int = 15) -> httpx.Response:
+    """Perform a GET request with redirects disabled to prevent SSRF.
+
+    Only follows redirects that stay on the same host (api.github.com or
+    raw.githubusercontent.com) by not following redirects at all and letting
+    the caller handle non-200 responses.  This prevents open-redirect /
+    SSRF attacks where a malicious server could redirect requests to internal
+    services.
+    """
+    return httpx.get(url, follow_redirects=False, timeout=timeout)
+
+
 def list_skills_in_repo(repo: str, branch: str = DEFAULT_BRANCH) -> List[str]:
     """Return names of all skills available in a GitHub repo.
 
@@ -76,7 +88,7 @@ def list_skills_in_repo(repo: str, branch: str = DEFAULT_BRANCH) -> List[str]:
     """
     url = _GITHUB_TREE_API.format(repo=repo, branch=branch)
     try:
-        resp = httpx.get(url, follow_redirects=True, timeout=15)
+        resp = _safe_get(url)
         if resp.status_code != 200:
             return []
         tree = resp.json().get("tree", [])
@@ -104,7 +116,7 @@ def fetch_skill_from_repo(
     """
     url = _GITHUB_RAW.format(repo=repo, branch=branch, skill=skill_name)
     try:
-        resp = httpx.get(url, follow_redirects=True, timeout=15)
+        resp = _safe_get(url)
         if resp.status_code != 200:
             return None
     except httpx.HTTPError:

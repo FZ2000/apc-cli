@@ -453,19 +453,27 @@ def import_cmd(path: str, no_secrets: bool, yes: bool):
         save_mcp_servers(merged_mcp)
         success(f"MCP servers: {len(new_mcp)} imported ({len(merged_mcp)} total)")
 
-    # 4. Copy installed skills
+    # 4. Copy installed skills (sanitize names to prevent path traversal)
     import_skills_dir = import_dir / "skills"
     if import_skills_dir.exists():
+        from skills import sanitize_skill_name
+
         skills_dir = get_skills_dir()
         skills_dir.mkdir(parents=True, exist_ok=True)
         count = 0
         for src in sorted(import_skills_dir.iterdir()):
-            if src.is_dir() and (src / "SKILL.md").exists():
-                dst = skills_dir / src.name
-                if dst.exists():
-                    shutil.rmtree(dst)
-                shutil.copytree(src, dst)
-                count += 1
+            if not src.is_dir() or not (src / "SKILL.md").exists():
+                continue
+            try:
+                safe_name = sanitize_skill_name(src.name)
+            except ValueError as exc:
+                warning(f"Skipping skill with unsafe name {src.name!r}: {exc}")
+                continue
+            dst = skills_dir / safe_name
+            if dst.exists():
+                shutil.rmtree(dst)
+            shutil.copytree(src, dst)
+            count += 1
         if count:
             success(f"Installed skills: {count} copied to {skills_dir}")
 

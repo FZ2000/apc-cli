@@ -3,6 +3,7 @@
 Handles the `apc install owner/repo` command and all its options.
 """
 
+import re
 from typing import List
 
 import click
@@ -17,6 +18,35 @@ from skills import (
     sanitize_skill_name,
     save_skill_file,
 )
+
+# Allowlist patterns for GitHub owner/repo and branch names
+# owner/repo: letters, digits, hyphens, underscores, dots — no leading dots/hyphens
+_REPO_RE = re.compile(r"^[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}$")
+# branch: letters, digits, hyphens, underscores, dots, slashes — no path traversal
+_BRANCH_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/\-]{0,253}$")
+
+
+def _validate_repo(repo: str) -> None:
+    """Raise UsageError if repo is not a safe owner/repo string."""
+    if not _REPO_RE.match(repo):
+        raise click.UsageError(
+            f"Invalid repo format {repo!r}. "
+            "Must be 'owner/repo' with only letters, digits, hyphens, underscores, and dots."
+        )
+    # Reject obvious traversal attempts even if regex passes
+    if ".." in repo or repo.startswith(".") or repo.endswith("."):
+        raise click.UsageError(f"Repo name {repo!r} contains disallowed sequences.")
+
+
+def _validate_branch(branch: str) -> None:
+    """Raise UsageError if branch contains unsafe characters."""
+    if not _BRANCH_RE.match(branch):
+        raise click.UsageError(
+            f"Invalid branch name {branch!r}. "
+            "Only letters, digits, hyphens, underscores, dots, and slashes are allowed."
+        )
+    if ".." in branch:
+        raise click.UsageError(f"Branch name {branch!r} contains disallowed path traversal.")
 
 _AGENTS = ["claude-code", "cursor", "gemini-cli", "github-copilot", "openclaw", "windsurf"]
 
@@ -102,12 +132,14 @@ def install(repo, skills, install_all, targets, branch, list_only, yes):
       apc install owner/repo --skill frontend-design -t claude-code -t cursor
       apc install owner/repo --all -t claude-code -y
     """
-    # Validate: repo must look like owner/repo
-    if "/" not in repo or repo.startswith("http"):
+    # Validate: repo must look like owner/repo with safe characters
+    if repo.startswith("http"):
         raise click.UsageError(
             "REPO must be a GitHub repository name in owner/repo format"
-            " (e.g. vercel-labs/target-skills)"
+            " (e.g. vercel-labs/target-skills), not a full URL."
         )
+    _validate_repo(repo)
+    _validate_branch(branch)
 
     # --list: just show available skills and exit
     if list_only:
