@@ -115,7 +115,6 @@ apc --version
 |------|-------------|
 | `--tools <list>` | Comma-separated tool list (e.g., `claude-code,cursor`) |
 | `--no-memory` | Skip collecting memory entries |
-| `--dry-run` | Preview what would be collected without writing |
 | `--yes`, `-y` | Skip confirmation prompts |
 
 **Options for `sync`:**
