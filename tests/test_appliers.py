@@ -477,10 +477,10 @@ class TestOpenClawApplier(unittest.TestCase):
 
         self.assertEqual(count, 1)
         skill_md = self.skills_dir / "test-skill" / "SKILL.md"
-        self.assertTrue(skill_md.exists(), "SKILL.md should exist after replacing symlink")
-        self.assertFalse(
+        self.assertTrue(skill_md.exists(), "SKILL.md should be written through the symlink")
+        self.assertTrue(
             symlink_path.is_symlink(),
-            "skill dir should be a real directory, not a symlink, after apply_skills",
+            "apc install symlink must be preserved — apply_skills writes through it, not over it",
         )
 
     def test_apply_skills_multiple_skills(self):
