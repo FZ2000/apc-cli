@@ -21,6 +21,11 @@ def _is_raw_file_entry(entry: dict) -> bool:
     return "source_file" in entry
 
 
+def _is_manual_entry(entry: dict) -> bool:
+    """Detect manually-added entries (source_tool == 'manual')."""
+    return entry.get("source_tool") == "manual"
+
+
 @click.group()
 def memory():
     """Manage AI memory entries (local cache)."""
@@ -39,15 +44,20 @@ def memory():
 )
 def add(text, category):
     """Add a memory entry to local cache. Usage: apc memory add "your text" """
-    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    short_hash = hashlib.md5(text.encode()).hexdigest()[:6]
-    entry_id = f"{ts}_{short_hash}"
+    # Use the new schema (id + source_tool) so that:
+    # 1. The same text added twice is idempotent — content-hash id is stable (#45)
+    # 2. merge_memory deduplicates via 'id', not a timestamp-based entry_id
+    content_id = hashlib.sha256(f"manual:{category}:{text}".encode()).hexdigest()[:16]
+    now = datetime.now(timezone.utc).isoformat()
 
     new_entry = {
-        "entry_id": entry_id,
+        "id": content_id,
+        "source_tool": "manual",
+        "source_file": "memory_add",
+        "label": f"Manual [{category}]",
         "category": category,
         "content": text,
-        "source": "manual_add",
+        "collected_at": now,
     }
 
     existing = load_memory()
@@ -65,11 +75,26 @@ def list_entries():
         click.echo("No memory entries found. Run 'apc collect' or 'apc memory add \"...\"' first.")
         return
 
-    # Separate raw-file entries from legacy entries
-    raw_files = [e for e in entries if _is_raw_file_entry(e)]
+    # Separate entries into three groups:
+    # 1. manually-added (new schema, source_tool=="manual") — show content
+    # 2. raw collected files (new schema, source_tool != "manual") — show path + size
+    # 3. legacy format (no source_file key) — show content grouped by category
+    manual = [e for e in entries if _is_raw_file_entry(e) and _is_manual_entry(e)]
+    raw_files = [e for e in entries if _is_raw_file_entry(e) and not _is_manual_entry(e)]
     legacy = [e for e in entries if not _is_raw_file_entry(e)]
 
-    # Display raw-file entries
+    # Display manually-added entries grouped by category
+    if manual:
+        by_category: dict = {}
+        for entry in manual:
+            cat = entry.get("category", "manual")
+            by_category.setdefault(cat, []).append(entry)
+        for cat, items in sorted(by_category.items()):
+            click.echo(f"\n[{cat}]")
+            for item in items:
+                click.echo(f"  - {item.get('content', '')}  (manual)")
+
+    # Display collected file entries (tool memory files)
     if raw_files:
         click.echo("\n[Collected Files]")
         for entry in raw_files:
@@ -84,12 +109,12 @@ def list_entries():
 
     # Display legacy entries grouped by category
     if legacy:
-        by_category = {}
+        by_category2: dict = {}
         for entry in legacy:
             cat = entry.get("category", "unknown")
-            by_category.setdefault(cat, []).append(entry)
+            by_category2.setdefault(cat, []).append(entry)
 
-        for cat, items in sorted(by_category.items()):
+        for cat, items in sorted(by_category2.items()):
             click.echo(f"\n[{cat}]")
             for item in items:
                 source = item.get("source", "")

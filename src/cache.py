@@ -95,11 +95,30 @@ def merge_memory(existing: List[Dict], new: List[Dict]) -> List[Dict]:
 
     Supports both old format (entry_id key) and new format (id key based on
     content hash of source_tool:source_file:content).
+
+    The fallback key is a SHA-256 of the entry content — never str(id(e)) which
+    changes every Python process invocation and would cause duplication (#36).
     """
+    import hashlib
+
+    def _stable_fallback(e: Dict) -> str:
+        """Deterministic key for entries that lack an explicit id field."""
+        # Use content + source fields to build a stable hash so that the
+        # same entry loaded from disk on two different runs gets the same key.
+        raw = "|".join(
+            [
+                str(e.get("content", "")),
+                str(e.get("source_tool", "")),
+                str(e.get("source_file", "")),
+                str(e.get("category", "")),
+            ]
+        )
+        return "fallback:" + hashlib.sha256(raw.encode()).hexdigest()[:16]
 
     def _key(e: Dict) -> str:
-        # New format uses "id" (content-hash), old format uses "entry_id"
-        return e.get("id") or e.get("entry_id") or str(id(e))
+        # New format uses "id" (content-hash), old format uses "entry_id".
+        # Fallback to a stable content hash — never str(id(e)) (#36).
+        return e.get("id") or e.get("entry_id") or _stable_fallback(e)
 
     index = {_key(e): e for e in existing}
     for e in new:
