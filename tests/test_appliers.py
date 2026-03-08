@@ -453,35 +453,22 @@ class TestOpenClawApplier(unittest.TestCase):
         self.assertTrue(skill_md.exists())
         self.assertIn("test-skill", manifest.managed_skill_names())
 
-    def test_apply_skills_replaces_symlink(self):
-        """apply_skills must not crash when skill dir is a pre-existing symlink (apc install)."""
-        # Simulate what `apc install` does: create a symlink in skills_dir
-        real_source = self.tmpdir / "source" / "test-skill"
-        real_source.mkdir(parents=True)
-        (real_source / "SKILL.md").write_text("# Original", encoding="utf-8")
+    def test_apply_skills_does_not_create_symlinks(self):
+        """apply_skills (collected skills path) always writes real directories, never symlinks.
 
-        symlink_path = self.skills_dir / "test-skill"
-        symlink_path.symlink_to(real_source)
-        self.assertTrue(symlink_path.is_symlink(), "precondition: symlink must exist")
-
-        # Now run apply_skills — must NOT raise FileExistsError (errno 17)
+        Installed skills are linked via link_skills(). apply_skills() is only called
+        for collected skills which have no source directory — so it must create a real dir.
+        """
         manifest = self._manifest()
         with patch("appliers.openclaw._openclaw_skills_dir", return_value=self.skills_dir):
             from appliers.openclaw import OpenClawApplier
 
             applier = OpenClawApplier()
-            try:
-                count = applier.apply_skills([self._skill()], manifest)
-            except FileExistsError as exc:
-                self.fail(f"apply_skills raised FileExistsError on symlink: {exc}")
+            applier.apply_skills([self._skill()], manifest)
 
-        self.assertEqual(count, 1)
-        skill_md = self.skills_dir / "test-skill" / "SKILL.md"
-        self.assertTrue(skill_md.exists(), "SKILL.md should be written through the symlink")
-        self.assertTrue(
-            symlink_path.is_symlink(),
-            "apc install symlink must be preserved — apply_skills writes through it, not over it",
-        )
+        skill_dir = self.skills_dir / "test-skill"
+        self.assertTrue(skill_dir.is_dir())
+        self.assertFalse(skill_dir.is_symlink(), "apply_skills must create a real dir, not a symlink")
 
     def test_apply_skills_multiple_skills(self):
         """apply_skills handles multiple skills in one call."""
