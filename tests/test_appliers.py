@@ -424,3 +424,75 @@ class TestReadExistingMemoryFiles(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestOpenClawApplier(unittest.TestCase):
+    def setUp(self):
+        self.tmpdir = Path(tempfile.mkdtemp())
+        self.skills_dir = self.tmpdir / ".openclaw" / "skills"
+        self.skills_dir.mkdir(parents=True)
+        self.manifest_path = self.tmpdir / "manifest.json"
+
+    def _manifest(self) -> "ToolManifest":
+        return ToolManifest("openclaw", path=self.manifest_path)
+
+    def _skill(self, name="test-skill"):
+        return {"name": name, "description": "A test skill", "body": "# Test\nDo things."}
+
+    def test_apply_skills_clean_dir(self):
+        """apply_skills writes SKILL.md into a per-skill subdirectory."""
+        manifest = self._manifest()
+        with patch("appliers.openclaw._openclaw_skills_dir", return_value=self.skills_dir):
+            from appliers.openclaw import OpenClawApplier
+
+            applier = OpenClawApplier()
+            count = applier.apply_skills([self._skill()], manifest)
+
+        self.assertEqual(count, 1)
+        skill_md = self.skills_dir / "test-skill" / "SKILL.md"
+        self.assertTrue(skill_md.exists())
+        self.assertIn("test-skill", manifest.managed_skill_names())
+
+    def test_apply_skills_replaces_symlink(self):
+        """apply_skills must not crash when skill dir is a pre-existing symlink (apc install)."""
+        # Simulate what `apc install` does: create a symlink in skills_dir
+        real_source = self.tmpdir / "source" / "test-skill"
+        real_source.mkdir(parents=True)
+        (real_source / "SKILL.md").write_text("# Original", encoding="utf-8")
+
+        symlink_path = self.skills_dir / "test-skill"
+        symlink_path.symlink_to(real_source)
+        self.assertTrue(symlink_path.is_symlink(), "precondition: symlink must exist")
+
+        # Now run apply_skills — must NOT raise FileExistsError (errno 17)
+        manifest = self._manifest()
+        with patch("appliers.openclaw._openclaw_skills_dir", return_value=self.skills_dir):
+            from appliers.openclaw import OpenClawApplier
+
+            applier = OpenClawApplier()
+            try:
+                count = applier.apply_skills([self._skill()], manifest)
+            except FileExistsError as exc:
+                self.fail(f"apply_skills raised FileExistsError on symlink: {exc}")
+
+        self.assertEqual(count, 1)
+        skill_md = self.skills_dir / "test-skill" / "SKILL.md"
+        self.assertTrue(skill_md.exists(), "SKILL.md should exist after replacing symlink")
+        self.assertFalse(
+            symlink_path.is_symlink(),
+            "skill dir should be a real directory, not a symlink, after apply_skills",
+        )
+
+    def test_apply_skills_multiple_skills(self):
+        """apply_skills handles multiple skills in one call."""
+        skills = [self._skill("alpha"), self._skill("beta")]
+        manifest = self._manifest()
+        with patch("appliers.openclaw._openclaw_skills_dir", return_value=self.skills_dir):
+            from appliers.openclaw import OpenClawApplier
+
+            applier = OpenClawApplier()
+            count = applier.apply_skills(skills, manifest)
+
+        self.assertEqual(count, 2)
+        self.assertTrue((self.skills_dir / "alpha" / "SKILL.md").exists())
+        self.assertTrue((self.skills_dir / "beta" / "SKILL.md").exists())
