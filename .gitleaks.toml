@@ -1,0 +1,11 @@
+title = "APC CLI gitleaks config"
+
+[extend]
+# Use gitleaks default ruleset as the base
+useDefault = true
+
+[[allowlists]]
+description = "Test files that deliberately contain fake token patterns to test secret-scrubbing"
+paths = [
+    '''tests/test_security_secret_handling\.py''',
+]

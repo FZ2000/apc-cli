@@ -126,6 +126,15 @@ def sync_mcp(tool_list: List[str], override: bool = False) -> int:
         warning("No MCP servers in cache. Run 'apc collect' first.")
         return 0
 
+    # Warn once if any server has secrets that will be written to disk (#32)
+    servers_with_secrets = [s for s in mcp_servers if s.get("secret_placeholders")]
+    if servers_with_secrets:
+        warning(
+            f"{len(servers_with_secrets)} MCP server(s) have secrets that will be resolved "
+            "and written to tool config files (chmod 600). "
+            "Ensure those files are excluded from version control."
+        )
+
     current_mcp_names = [s.get("name", "unnamed") for s in mcp_servers]
     total = 0
 

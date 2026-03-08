@@ -1,6 +1,8 @@
 """Claude Code applier — writes skills, MCP, memory, settings."""
 
 import json
+import os
+import stat
 from pathlib import Path
 from typing import Dict, List
 
@@ -125,7 +127,10 @@ class ClaudeApplier(BaseApplier):
             count += 1
 
         data["mcpServers"] = mcp_servers
-        _claude_json().write_text(json.dumps(data, indent=2), encoding="utf-8")
+        target = _claude_json()
+        target.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        # Restrict to owner-only since the file may contain resolved API keys (#32)
+        os.chmod(target, stat.S_IRUSR | stat.S_IWUSR)
         return count
 
     def _read_existing_memory_files(self) -> Dict[str, str]:

@@ -1,6 +1,8 @@
 """GitHub Copilot applier — writes instructions and MCP configs."""
 
 import json
+import os
+import stat
 from pathlib import Path
 from typing import Dict, List
 
@@ -141,8 +143,11 @@ class CopilotApplier(BaseApplier):
             count += 1
 
         data["servers"] = vscode_servers
-        VSCODE_MCP_JSON.parent.mkdir(parents=True, exist_ok=True)
-        VSCODE_MCP_JSON.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        vscode_mcp = Path(VSCODE_MCP_JSON).resolve()
+        vscode_mcp.parent.mkdir(parents=True, exist_ok=True)
+        vscode_mcp.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        # Restrict to owner-only since the file may contain resolved API keys (#32)
+        os.chmod(vscode_mcp, stat.S_IRUSR | stat.S_IWUSR)
         return count
 
     def _read_existing_memory_files(self) -> Dict[str, str]:

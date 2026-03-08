@@ -17,6 +17,29 @@ SECRET_FIELD_PATTERNS = [
     r".*private.*key.*",
 ]
 
+# Regex for values that look like secrets (high-entropy, common token formats)
+_SECRET_VALUE_RE = re.compile(
+    r"(?:"
+    r"sk-[A-Za-z0-9]{20,}"  # OpenAI-style keys
+    r"|sk-ant-[A-Za-z0-9\-]{20,}"  # Anthropic-style keys
+    r"|AIza[A-Za-z0-9_\-]{35,}"  # Google API keys
+    r"|eyJ[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+"  # JWT tokens
+    r"|ghp_[A-Za-z0-9]{36,}"  # GitHub personal tokens
+    r"|ghs_[A-Za-z0-9]{36,}"  # GitHub server tokens
+    r"|[A-Za-z0-9+/]{40,}={0,2}"  # Base64-encoded blobs (≥40 chars)
+    r")"
+)
+
+
+def scrub_content(text: str) -> str:
+    """Replace recognisable secret values in *text* with a redaction marker.
+
+    This is a best-effort scan for common token / API-key formats.
+    It does NOT guarantee all secrets are removed — use it as a defence-in-depth
+    layer for export output that might be shared or committed to version control.
+    """
+    return _SECRET_VALUE_RE.sub("[REDACTED]", text)
+
 
 def is_secret_field(field_name: str) -> bool:
     """Check if a field name looks like it contains a secret."""

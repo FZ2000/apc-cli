@@ -1,6 +1,8 @@
 """Gemini CLI applier — writes MCP server configs and settings."""
 
 import json
+import os
+import stat
 from pathlib import Path
 from typing import Dict, List
 
@@ -132,7 +134,10 @@ class GeminiApplier(BaseApplier):
 
         data["mcpServers"] = mcp_servers
         _gemini_dir().mkdir(parents=True, exist_ok=True)
-        _gemini_settings().write_text(json.dumps(data, indent=2), encoding="utf-8")
+        settings_path = _gemini_settings()
+        settings_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        # Restrict to owner-only since the file may contain resolved API keys (#32)
+        os.chmod(settings_path, stat.S_IRUSR | stat.S_IWUSR)
         return count
 
     def _read_existing_memory_files(self) -> Dict[str, str]:

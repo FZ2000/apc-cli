@@ -1,6 +1,8 @@
 """Windsurf (Codeium) applier — writes MCP server configs and rules."""
 
 import json
+import os
+import stat
 from pathlib import Path
 from typing import Dict, List
 
@@ -148,7 +150,10 @@ class WindsurfApplier(BaseApplier):
 
         data["mcpServers"] = mcp_servers
         _windsurf_dir().mkdir(parents=True, exist_ok=True)
-        _windsurf_mcp_config().write_text(json.dumps(data, indent=2), encoding="utf-8")
+        mcp_config_path = _windsurf_mcp_config()
+        mcp_config_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        # Restrict to owner-only since the file may contain resolved API keys (#32)
+        os.chmod(mcp_config_path, stat.S_IRUSR | stat.S_IWUSR)
         return count
 
     def _read_existing_memory_files(self) -> Dict[str, str]:
