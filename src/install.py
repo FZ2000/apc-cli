@@ -148,6 +148,22 @@ def install(repo, skills, install_all, targets, branch, list_only, yes):
         available = list_skills_in_repo(repo, branch)
         if not available:
             click.echo(f"No skills found in {repo} (branch: {branch}).", err=True)
+            click.echo(
+                "\nSkills must follow the repository structure:\n"
+                "  skills/\n"
+                "    <skill-name>/\n"
+                "      SKILL.md        ← required\n"
+                "      README.md       ← optional\n"
+                "\nEach SKILL.md needs YAML frontmatter:\n"
+                "  ---\n"
+                "  name: skill-name\n"
+                "  description: What this skill does\n"
+                "  tags: [optional, list]\n"
+                "  ---\n"
+                "\n  <skill content here>\n"
+                "\nSee https://github.com/FZ2000/apc-cli for an example skills repo.",
+                err=True,
+            )
             return
         click.echo(f"\nAvailable skills in {repo}:\n")
         for name in available:

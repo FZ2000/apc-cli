@@ -4,6 +4,7 @@ import click
 
 from cache import load_local_bundle
 from collect import collect
+from doctor import doctor
 from export_import import export_cmd, import_cmd
 from install import install
 from llm_config import configure_cmd, models_cmd
@@ -63,6 +64,7 @@ cli.add_command(mcp)
 # LLM configuration
 cli.add_command(configure_cmd)
 cli.add_command(models_cmd)
+cli.add_command(doctor)
 
 # Export / Import
 cli.add_command(export_cmd)
