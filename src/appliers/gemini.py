@@ -81,6 +81,10 @@ class GeminiApplier(BaseApplier):
     def MEMORY_ALLOWED_BASE(self) -> "Path":  # noqa: N802
         return _gemini_dir()
 
+    @property  # type: ignore[override]
+    def MEMORY_TARGET_FILE(self) -> "Path":  # noqa: N802
+        return _gemini_md()
+
     def apply_skills(self, skills: List[Dict], manifest: ToolManifest) -> int:
         return 0  # Gemini doesn't have a skills format
 

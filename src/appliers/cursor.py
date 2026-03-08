@@ -74,6 +74,10 @@ def _cursor_mcp_json() -> Path:
     return Path.home() / ".cursor" / "mcp.json"
 
 
+def _cursor_memory_file() -> Path:
+    return _cursor_rules_dir() / "apc-memory.mdc"
+
+
 class CursorApplier(BaseApplier):
     TOOL_NAME = "cursor"
     MEMORY_SCHEMA = CURSOR_MEMORY_SCHEMA
@@ -81,6 +85,10 @@ class CursorApplier(BaseApplier):
     @property  # type: ignore[override]
     def MEMORY_ALLOWED_BASE(self) -> "Path":  # noqa: N802
         return _cursor_dir()
+
+    @property  # type: ignore[override]
+    def MEMORY_TARGET_FILE(self) -> "Path":  # noqa: N802
+        return _cursor_memory_file()
 
     @property
     def SKILL_DIR(self) -> Path:  # type: ignore[override]
