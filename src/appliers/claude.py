@@ -50,6 +50,7 @@ class ClaudeApplier(BaseApplier):
         self._skill_dir_override = value
 
     TOOL_NAME = "claude-code"
+    SKILL_DIR_EXCLUSIVE = True  # ~/.claude/skills/ is entirely apc-managed
     MEMORY_SCHEMA = CLAUDE_MEMORY_SCHEMA
 
     @property  # type: ignore[override]

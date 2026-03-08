@@ -66,6 +66,11 @@ class BaseApplier(ABC):
     SKILL_DIR: Optional[Path] = None
     TOOL_NAME: str = ""
 
+    # Set True when SKILL_DIR is exclusively apc-managed (no user files mixed in).
+    # apc sync will replace the entire dir with a single symlink → ~/.apc/skills/
+    # so that any future `apc install` is immediately live without re-running sync.
+    SKILL_DIR_EXCLUSIVE = False
+
     # Subclasses that support LLM-based memory sync should override this
     # with a description of how the tool expects its memory files.
     MEMORY_SCHEMA: str = ""
@@ -139,6 +144,39 @@ class BaseApplier(ABC):
             count += 1
 
         return count
+
+    def sync_skills_dir(self) -> bool:
+        """Establish a dir-level symlink: SKILL_DIR → ~/.apc/skills/.
+
+        Only applies when SKILL_DIR_EXCLUSIVE=True (dir is entirely apc-managed).
+        After this runs once, any future `apc install` is immediately live in
+        this tool without re-running sync.
+
+        Returns True if the symlink was established, False if not applicable.
+        """
+        from skills import get_skills_dir
+
+        if not self.SKILL_DIR_EXCLUSIVE or self.SKILL_DIR is None:
+            return False
+
+        skills_source = get_skills_dir()
+        skill_dir = self.SKILL_DIR
+
+        # Already correctly symlinked — nothing to do
+        link_target = Path(os.readlink(skill_dir)).resolve()
+        if skill_dir.is_symlink() and link_target == skills_source.resolve():
+            return True
+
+        # Remove whatever is there now
+        if skill_dir.is_symlink():
+            skill_dir.unlink()
+        elif skill_dir.exists():
+            shutil.rmtree(skill_dir)
+
+        # Ensure parent exists, then symlink
+        skill_dir.parent.mkdir(parents=True, exist_ok=True)
+        os.symlink(skills_source, skill_dir)
+        return True
 
     @abstractmethod
     def apply_mcp_servers(
