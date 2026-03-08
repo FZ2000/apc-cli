@@ -14,9 +14,7 @@ import os
 import sys
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock, call, patch
-
-import pytest
+from unittest.mock import MagicMock, patch
 
 # Ensure src/ is importable
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
@@ -268,10 +266,14 @@ class TestWindsurfSyncSkillsDir(unittest.TestCase):
     def test_sync_replaces_existing_apc_block(self):
         _make_skills_dir(self.home, "pdf")
         self._rules_path().parent.mkdir(parents=True, exist_ok=True)
-        self._rules_path().write_text(
-            "# Rules\n\n<!-- apc-skills-start -->\n## APC Skills\n- **old-skill**\n<!-- apc-skills-end -->\n",
-            encoding="utf-8",
+        stale_block = (
+            "# Rules\n\n"
+            "<!-- apc-skills-start -->\n"
+            "## APC Skills\n"
+            "- **old-skill**\n"
+            "<!-- apc-skills-end -->\n"
         )
+        self._rules_path().write_text(stale_block, encoding="utf-8")
 
         with (
             patch("appliers.windsurf._windsurf_global_rules", return_value=self._rules_path()),
