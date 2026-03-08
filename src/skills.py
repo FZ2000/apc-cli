@@ -84,9 +84,7 @@ def list_skills_in_repo(repo: str, branch: str = DEFAULT_BRANCH) -> List[str]:
     """
     url = _GITHUB_TREE_API.format(repo=repo, branch=branch)
     try:
-        resp = httpx.get(
-            url, follow_redirects=False, timeout=15, headers=_github_headers()
-        )
+        resp = httpx.get(url, follow_redirects=False, timeout=15, headers=_github_headers())
         if resp.status_code != 200:
             return []
         tree = resp.json().get("tree", [])
@@ -114,9 +112,7 @@ def fetch_skill_from_repo(
     """
     url = _GITHUB_RAW.format(repo=repo, branch=branch, skill=skill_name)
     try:
-        resp = httpx.get(
-            url, follow_redirects=False, timeout=15, headers=_github_headers()
-        )
+        resp = httpx.get(url, follow_redirects=False, timeout=15, headers=_github_headers())
         if resp.status_code != 200:
             return None
     except httpx.HTTPError:

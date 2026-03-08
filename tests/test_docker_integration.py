@@ -1090,9 +1090,7 @@ class TestInstallThenSync:
         (tmp_path / ".cursor").mkdir()
         (tmp_path / ".cursor" / "mcp.json").write_text("{}")
 
-        r_install = runner.invoke(
-            cli, ["install", self.TEST_REPO, "--all", "-t", "cursor", "-y"]
-        )
+        r_install = runner.invoke(cli, ["install", self.TEST_REPO, "--all", "-t", "cursor", "-y"])
         assert r_install.exit_code == 0, r_install.output
 
         skills_dir = tmp_path / ".apc" / "skills"
