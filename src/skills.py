@@ -68,6 +68,14 @@ def save_skill_file(skill_name: str, raw_content: str) -> Path:
 # ---------------------------------------------------------------------------
 
 
+def _github_headers() -> dict:
+    """Return auth headers if GITHUB_TOKEN is set, else empty dict."""
+    import os
+
+    token = os.environ.get("GITHUB_TOKEN")
+    return {"Authorization": f"Bearer {token}"} if token else {}
+
+
 def list_skills_in_repo(repo: str, branch: str = DEFAULT_BRANCH) -> List[str]:
     """Return names of all skills available in a GitHub repo.
 
@@ -76,7 +84,9 @@ def list_skills_in_repo(repo: str, branch: str = DEFAULT_BRANCH) -> List[str]:
     """
     url = _GITHUB_TREE_API.format(repo=repo, branch=branch)
     try:
-        resp = httpx.get(url, follow_redirects=True, timeout=15)
+        resp = httpx.get(
+            url, follow_redirects=False, timeout=15, headers=_github_headers()
+        )
         if resp.status_code != 200:
             return []
         tree = resp.json().get("tree", [])
@@ -104,7 +114,9 @@ def fetch_skill_from_repo(
     """
     url = _GITHUB_RAW.format(repo=repo, branch=branch, skill=skill_name)
     try:
-        resp = httpx.get(url, follow_redirects=True, timeout=15)
+        resp = httpx.get(
+            url, follow_redirects=False, timeout=15, headers=_github_headers()
+        )
         if resp.status_code != 200:
             return None
     except httpx.HTTPError:

@@ -1098,7 +1098,8 @@ class TestInstallThenSync:
         skills_dir = tmp_path / ".apc" / "skills"
         installed_count = len(list(skills_dir.iterdir())) if skills_dir.exists() else 0
         assert installed_count > 5, (
-            f"Expected >5 skills installed, got {installed_count}. Install output:\n{r_install.output}"
+            f"Expected >5 skills installed, got {installed_count}.\n"
+            f"Install output:\n{r_install.output}"
         )
 
         r_sync = runner.invoke(cli, ["sync", "--tools", "cursor", "--dry-run"])
