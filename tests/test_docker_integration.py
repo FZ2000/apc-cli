@@ -725,8 +725,8 @@ class TestSync:
         assert "mcpServers" in data
         assert len(data["mcpServers"]) > 0
         rules_dir = HOME / ".cursor" / "rules"
-        assert rules_dir.is_dir()
-        assert len(list(rules_dir.glob("*.mdc"))) > 0, "No .mdc skill files written to cursor"
+        # rules_dir is now a symlink → ~/.apc/skills/ (dir-level sync)
+        assert rules_dir.is_symlink() or rules_dir.is_dir(), f"rules dir missing: {rules_dir}"
 
     def test_sync_writes_cursor_mcp(self, runner, cli):
         runner.invoke(cli, ["sync", "--tools", "cursor", "--yes", "--no-memory", "--override-mcp"])
@@ -1040,8 +1040,12 @@ class TestInstallThenSync:
         r2 = runner.invoke(cli, ["sync", "--tools", "cursor", "--yes"])
         assert r2.exit_code == 0, r2.output
 
-        cursor_skill = tmp_path / ".cursor" / "rules" / f"{self.KNOWN_SKILL}.mdc"
-        assert cursor_skill.exists(), f"Skill not found at {cursor_skill} after sync"
+        # rules dir is a symlink → ~/.apc/skills/; skill appears as a subdir
+        rules_dir = tmp_path / ".cursor" / "rules"
+        assert rules_dir.is_symlink(), f"rules dir should be a symlink after sync: {rules_dir}"
+        skill_dir = rules_dir / self.KNOWN_SKILL
+        assert skill_dir.is_dir(), f"Skill dir {skill_dir} not found after sync"
+        assert (skill_dir / "SKILL.md").exists(), f"SKILL.md missing in {skill_dir}"
 
     def test_installed_skill_appears_in_skill_list(self, runner, cli, tmp_path, monkeypatch):
         """Installed skill appears in apc skill list immediately after install."""
@@ -1085,10 +1089,12 @@ class TestInstallThenSync:
         r_sync = runner.invoke(cli, ["sync", "--tools", "cursor", "--yes"])
         assert r_sync.exit_code == 0, r_sync.output
 
+        # rules dir is a symlink → ~/.apc/skills/; each skill is a subdir with SKILL.md
         rules_dir = tmp_path / ".cursor" / "rules"
+        assert rules_dir.is_symlink(), f"rules dir should be a symlink after sync: {rules_dir}"
         for name in skills:
-            assert (rules_dir / f"{name}.mdc").exists(), (
-                f"Skill {name} missing from cursor after sync"
+            assert (rules_dir / name / "SKILL.md").exists(), (
+                f"Skill {name}/SKILL.md missing from cursor after sync"
             )
 
     def test_install_all_then_sync_dry_run(self, runner, cli, tmp_path, monkeypatch):

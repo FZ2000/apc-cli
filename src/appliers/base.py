@@ -66,10 +66,11 @@ class BaseApplier(ABC):
     SKILL_DIR: Optional[Path] = None
     TOOL_NAME: str = ""
 
-    # Set True when SKILL_DIR is exclusively apc-managed (no user files mixed in).
-    # apc sync will replace the entire dir with a single symlink → ~/.apc/skills/
-    # so that any future `apc install` is immediately live without re-running sync.
-    SKILL_DIR_EXCLUSIVE = False
+    # When True, apc sync replaces the entire SKILL_DIR with a single symlink
+    # → ~/.apc/skills/ so any future `apc install` is immediately live.
+    # All tools default to True. Set False only for tools that cannot use a
+    # dir-level symlink (e.g. Copilot, which has no dedicated skills dir).
+    SKILL_DIR_EXCLUSIVE = True
 
     # Subclasses that support LLM-based memory sync should override this
     # with a description of how the tool expects its memory files.

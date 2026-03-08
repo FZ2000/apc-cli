@@ -62,7 +62,6 @@ class OpenClawApplier(BaseApplier):
         self._skill_dir_override = value
 
     TOOL_NAME = "openclaw"
-    SKILL_DIR_EXCLUSIVE = True  # ~/.openclaw/skills/ is entirely apc-managed
     MEMORY_SCHEMA = OPENCLAW_MEMORY_SCHEMA
 
     @property  # type: ignore[override]
