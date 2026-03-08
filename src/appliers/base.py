@@ -11,6 +11,14 @@ from typing import Dict, List, Optional
 from appliers.manifest import ToolManifest, _sha256
 from ui import spinner, warning
 
+
+class MemorySyncError(Exception):
+    """Raised when memory sync is skipped due to an LLM error (auth, network, etc.).
+
+    Callers (sync_helpers) catch this to print a ✗ indicator and an actionable
+    hint rather than the misleading ✓ that would otherwise appear (#31).
+    """
+
 # Prompt template for LLM-based memory sync
 SYNC_PROMPT = """You are transforming user memory/context for an AI tool.
 
@@ -183,11 +191,12 @@ class BaseApplier(ABC):
         try:
             from llm_client import call_llm
         except ImportError:
-            warning(
+            msg = (
                 f"LLM not available for memory sync to {self.TOOL_NAME}. "
                 "Run 'apc configure' to set up an LLM provider."
             )
-            return 0
+            warning(msg)
+            raise MemorySyncError(msg)
 
         # Read existing files
         existing = self._read_existing_memory_files()
@@ -210,13 +219,15 @@ class BaseApplier(ABC):
         except Exception as e:
             error_msg = str(e)
             if "No LLM model configured" in error_msg:
-                warning(
+                msg = (
                     f"No LLM configured for memory sync to {self.TOOL_NAME}. "
                     "Run 'apc configure' to set up an LLM provider."
                 )
             else:
-                warning(f"LLM call failed ({e}), skipping memory sync for {self.TOOL_NAME}")
-            return 0
+                msg = f"LLM call failed ({e}), skipping memory sync for {self.TOOL_NAME}"
+            warning(msg)
+            # Raise so callers can display ✗ instead of the misleading ✓ (#31)
+            raise MemorySyncError(msg) from e
 
         # Parse structured output
         try:

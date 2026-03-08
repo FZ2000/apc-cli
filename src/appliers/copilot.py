@@ -11,6 +11,8 @@ from appliers.manifest import ToolManifest
 
 
 def _copilot_instructions() -> Path:
+    # Copilot instructions are project-scoped by design; use CWD so the file
+    # lands in the active project repository (intentional).
     return Path.cwd() / ".github" / "copilot-instructions.md"
 
 
@@ -19,14 +21,17 @@ def _copilot_instructions_dir() -> Path:
 
 
 def _vscode_mcp_json() -> Path:
-    return Path.cwd() / ".vscode" / "mcp.json"
+    # Use the VS Code user-level (global) MCP config so that `apc` writes to a
+    # stable path regardless of which directory it is invoked from (#42).
+    return Path.home() / ".vscode" / "mcp.json"
 
 
 # Module-level aliases kept for backward compatibility with extractors
 # (evaluated lazily through the functions above inside the class methods)
 COPILOT_INSTRUCTIONS = Path(".github") / "copilot-instructions.md"
 COPILOT_INSTRUCTIONS_DIR = Path(".github") / "instructions"
-VSCODE_MCP_JSON = Path(".vscode") / "mcp.json"
+# Global VS Code user config — see _vscode_mcp_json() above (#42)
+VSCODE_MCP_JSON = Path.home() / ".vscode" / "mcp.json"
 
 COPILOT_MEMORY_SCHEMA = """
 GitHub Copilot reads custom instructions from two locations:

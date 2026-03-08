@@ -55,6 +55,8 @@ class ToolManifest:
             "schema_version": SCHEMA_VERSION,
             "tool": self.tool,
             "last_sync_at": None,
+            "last_sync_result": None,   # "success" | "error" | None
+            "last_sync_error": None,    # human-readable error string when result=="error"
             "skills": {},
             "linked_skills": {},
             "mcp_servers": {},
@@ -66,8 +68,15 @@ class ToolManifest:
         """True when no manifest existed on disk before this run."""
         return self._data.get("last_sync_at") is None
 
-    def save(self) -> None:
+    def save(self, result: str = "success", error_msg: Optional[str] = None) -> None:
+        """Persist the manifest to disk.
+
+        Pass result="error" (and an optional error_msg) when saving after a
+        failed sync so that `apc status` can surface the error state (#34).
+        """
         self._data["last_sync_at"] = _now_iso()
+        self._data["last_sync_result"] = result
+        self._data["last_sync_error"] = error_msg
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.write_text(json.dumps(self._data, indent=2), encoding="utf-8")
 

@@ -7,8 +7,10 @@ from typing import Dict, List
 
 from extractors.base import BaseExtractor
 
+# Copilot instructions are project-scoped (CWD-relative is intentional).
 COPILOT_INSTRUCTIONS = Path(".github") / "copilot-instructions.md"
-VSCODE_MCP_JSON = Path(".vscode") / "mcp.json"
+# VS Code user-level global MCP config — stable regardless of CWD (#42).
+VSCODE_MCP_JSON = Path.home() / ".vscode" / "mcp.json"
 
 
 class CopilotExtractor(BaseExtractor):

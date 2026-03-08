@@ -85,6 +85,11 @@ class OpenClawApplier(BaseApplier):
 
             # OpenClaw uses directory-based skills: <name>/SKILL.md
             skill_dir = _openclaw_skills_dir() / name
+            # If a previous `apc install` left a symlink here, remove it before
+            # calling mkdir — Path.mkdir(exist_ok=True) raises FileExistsError
+            # (errno 17) on symlinks even when the link points to a directory (#33).
+            if skill_dir.is_symlink():
+                skill_dir.unlink()
             skill_dir.mkdir(parents=True, exist_ok=True)
             path = skill_dir / "SKILL.md"
             path.write_text(content, encoding="utf-8")

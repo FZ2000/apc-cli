@@ -83,10 +83,27 @@ def merge_skills(existing: List[Dict], new: List[Dict]) -> List[Dict]:
 
 
 def merge_mcp_servers(existing: List[Dict], new: List[Dict]) -> List[Dict]:
-    """Merge new MCP servers into existing by (source_tool, name) key. Upsert only."""
-    index = {(_key_mcp(s)): s for s in existing}
+    """Merge new MCP servers into existing by name. Upsert, but preserve source_tool.
+
+    When the same server name is collected from multiple tools (e.g. a shared
+    MCP server that both Claude and Cursor have configured), we keep the
+    *first*-collected entry's source_tool so that `apc mcp list` reports the
+    original source rather than whichever tool was collected last (#47).
+
+    All other fields (command, args, env, …) are updated from the new entry so
+    that config changes are picked up on re-collect.
+    """
+    index = {_key_mcp(s): s for s in existing}
     for s in new:
-        index[_key_mcp(s)] = s
+        key = _key_mcp(s)
+        if key in index:
+            # Preserve the original source attribution; refresh everything else.
+            original_source = index[key].get("source_tool")
+            index[key] = {**s}
+            if original_source:
+                index[key]["source_tool"] = original_source
+        else:
+            index[key] = s
     return list(index.values())
 
 

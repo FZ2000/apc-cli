@@ -6,6 +6,7 @@ Used by `apc sync`, `apc skill sync`, `apc memory sync`, and `apc mcp sync`.
 from typing import Dict, List, Optional, Tuple
 
 from appliers import get_applier
+from appliers.base import MemorySyncError
 from cache import load_local_bundle, load_mcp_servers
 from extractors import detect_installed_tools
 from secrets_manager import retrieve_secret
@@ -168,6 +169,8 @@ def sync_memory(tool_list: List[str]) -> int:
 
     total = 0
 
+    llm_failed = False
+
     for tool_name in tool_list:
         try:
             applier = get_applier(tool_name)
@@ -178,8 +181,18 @@ def sync_memory(tool_list: List[str]) -> int:
 
             total += mem
             success(f"{tool_name}: {mem} memory files")
+        except MemorySyncError:
+            # Warning already printed by apply_memory_via_llm; just mark failure.
+            error(f"{tool_name}: ✗ memory sync failed — run 'apc configure' to fix your LLM")
+            llm_failed = True
         except Exception as e:
             error(f"Failed to sync memory to {tool_name}: {e}")
+
+    if llm_failed:
+        warning(
+            "\nMemory sync was skipped for one or more tools due to an LLM error.\n"
+            "  → Run: apc configure --provider <provider> --api-key <key>"
+        )
 
     return total
 
@@ -224,10 +237,14 @@ def sync_all(tool_list: List[str], no_memory: bool = False, override_mcp: bool =
             secrets = _resolve_all_mcp_secrets(mcp_servers)
             m = applier.apply_mcp_servers(mcp_servers, secrets, manifest, override=override_mcp)
 
-            # Memory
+            # Memory — errors here are non-fatal for the overall tool sync
             mem = 0
+            mem_failed = False
             if memory_entries:
-                mem = applier.apply_memory_via_llm(memory_entries, manifest)
+                try:
+                    mem = applier.apply_memory_via_llm(memory_entries, manifest)
+                except MemorySyncError:
+                    mem_failed = True  # warning already printed by apply_memory_via_llm
 
             # Prune orphans
             applier.prune(all_skill_names, current_mcp_names, manifest)
@@ -237,10 +254,16 @@ def sync_all(tool_list: List[str], no_memory: bool = False, override_mcp: bool =
             total_mcp += m
             total_memory += mem
 
-            success(f"{tool_name}: {s + lk} skills, {m} MCP servers, {mem} memory files")
+            mem_note = " (⚠ memory skipped — LLM error)" if mem_failed else ""
+            success(f"{tool_name}: {s + lk} skills, {m} MCP servers, {mem} memory files{mem_note}")
         except Exception as e:
             error(f"Failed to apply to {tool_name}: {e}")
             failed_tools.append(tool_name)
+            # Record the failure in the manifest so `apc status` shows ✗ (#34)
+            try:
+                manifest.save(result="error", error_msg=str(e))
+            except Exception:
+                pass  # don't mask the original error
 
     any_success = len(failed_tools) < len(tool_list)
     if any_success:
