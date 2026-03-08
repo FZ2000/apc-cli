@@ -7,18 +7,26 @@ from typing import Dict, List
 
 from extractors.base import BaseExtractor
 
-COPILOT_INSTRUCTIONS = Path(".github") / "copilot-instructions.md"
-VSCODE_MCP_JSON = Path(".vscode") / "mcp.json"
+
+def _copilot_instructions() -> Path:
+    """Absolute path to copilot-instructions.md, resolved at call-time from CWD (#42)."""
+    return Path.cwd().resolve() / ".github" / "copilot-instructions.md"
+
+
+def _vscode_mcp_json() -> Path:
+    """Absolute path to .vscode/mcp.json, resolved at call-time from CWD (#42)."""
+    return Path.cwd().resolve() / ".vscode" / "mcp.json"
 
 
 class CopilotExtractor(BaseExtractor):
     def extract_skills(self) -> List[Dict]:
         skills = []
-        if not COPILOT_INSTRUCTIONS.exists():
+        instructions = _copilot_instructions()
+        if not instructions.exists():
             return skills
 
         try:
-            content = COPILOT_INSTRUCTIONS.read_text(encoding="utf-8")
+            content = instructions.read_text(encoding="utf-8")
             checksum = f"sha256:{hashlib.sha256(content.encode()).hexdigest()[:16]}"
             skills.append(
                 {
@@ -29,7 +37,7 @@ class CopilotExtractor(BaseExtractor):
                     "targets": [],
                     "version": "1.0.0",
                     "source_tool": "github-copilot",
-                    "source_path": str(COPILOT_INSTRUCTIONS),
+                    "source_path": str(instructions),
                     "checksum": checksum,
                 }
             )
@@ -40,11 +48,12 @@ class CopilotExtractor(BaseExtractor):
 
     def extract_mcp_servers(self) -> List[Dict]:
         servers = []
-        if not VSCODE_MCP_JSON.exists():
+        vscode_mcp = _vscode_mcp_json()
+        if not vscode_mcp.exists():
             return servers
 
         try:
-            data = json.loads(VSCODE_MCP_JSON.read_text(encoding="utf-8"))
+            data = json.loads(vscode_mcp.read_text(encoding="utf-8"))
             for name, cfg in data.get("servers", {}).items():
                 servers.append(
                     {
