@@ -151,7 +151,6 @@ apc --version
 | Flag | Description |
 |------|-------------|
 | `--skill`, `-s` | Skill name(s) to install (repeatable, or `'*'` for all) |
-| `--target`, `-t` | Target tool(s) to install to (repeatable, or `'*'` for all detected) |
 | `--branch` | Git branch to fetch from (default: `main`) |
 | `--list` | List available skills without installing |
 | `--yes`, `-y` | Skip confirmation prompts |
