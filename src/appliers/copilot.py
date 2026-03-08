@@ -92,6 +92,7 @@ language or path-specific rules.
 
 class CopilotApplier(BaseApplier):
     TOOL_NAME = "github-copilot"
+    SYNC_METHOD = "per-file-symlink"
     MEMORY_SCHEMA = COPILOT_MEMORY_SCHEMA
 
     @property  # type: ignore[override]

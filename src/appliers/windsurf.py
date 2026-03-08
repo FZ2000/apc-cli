@@ -91,6 +91,7 @@ def _windsurf_global_rules() -> Path:
 
 class WindsurfApplier(BaseApplier):
     TOOL_NAME = "windsurf"
+    SYNC_METHOD = "injection"
     MEMORY_SCHEMA = WINDSURF_MEMORY_SCHEMA
 
     @property  # type: ignore[override]

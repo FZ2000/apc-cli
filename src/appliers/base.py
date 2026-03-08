@@ -64,6 +64,7 @@ class BaseApplier(ABC):
     # Subclasses that support skills should set this to their skill directory
     # and the target name used in frontmatter filtering.
     SKILL_DIR: Optional[Path] = None
+    SYNC_METHOD: str = "dir-symlink"  # override in injection/per-file tools
     TOOL_NAME: str = ""
 
     # Subclasses that support LLM-based memory sync should override this
