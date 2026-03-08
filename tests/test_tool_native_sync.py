@@ -756,5 +756,249 @@ class TestInstallNoTargetFlag(unittest.TestCase):
         assert result.exit_code != 0
 
 
+# ---------------------------------------------------------------------------
+# BaseApplier: remove_installed_skill default (no-op)
+# ---------------------------------------------------------------------------
+
+
+class TestBaseApplierRemoveSkill(unittest.TestCase):
+    def test_remove_installed_skill_returns_false(self):
+        """Dir-symlink tools return False — symlink makes the deletion automatic."""
+        from appliers.claude import ClaudeApplier
+
+        applier = ClaudeApplier()
+        result = applier.remove_installed_skill("pdf")
+        assert result is False
+
+
+# ---------------------------------------------------------------------------
+# WindsurfApplier: remove_installed_skill
+# ---------------------------------------------------------------------------
+
+
+class TestWindsurfRemoveSkill(unittest.TestCase):
+    def setUp(self):
+        import tempfile
+
+        self._tmp = tempfile.TemporaryDirectory()
+        self.home = Path(self._tmp.name)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _rules_path(self):
+        return self.home / ".codeium" / "windsurf" / "memories" / "global_rules.md"
+
+    def _make_applier(self):
+        from appliers.windsurf import WindsurfApplier
+
+        return WindsurfApplier()
+
+    def test_remove_regenerates_block_without_deleted_skill(self):
+        """After uninstall, global_rules.md block no longer lists the removed skill."""
+        _make_skills_dir(self.home, "pdf", "frontend-design")
+
+        with (
+            patch("appliers.windsurf._windsurf_global_rules", return_value=self._rules_path()),
+            patch("skills.get_skills_dir", return_value=self.home / ".apc" / "skills"),
+        ):
+            applier = self._make_applier()
+            applier.sync_skills_dir()
+
+            # Delete the skill dir (simulate apc uninstall)
+            import shutil
+
+            shutil.rmtree(self.home / ".apc" / "skills" / "pdf")
+
+            result = applier.remove_installed_skill("pdf")
+
+        assert result is True
+        content = self._rules_path().read_text()
+        assert "pdf" not in content
+        assert "frontend-design" in content
+
+    def test_remove_returns_true_even_when_no_other_skills(self):
+        """Regeneration succeeds even if all skills are gone (produces empty block)."""
+        _make_skills_dir(self.home, "pdf")
+
+        with (
+            patch("appliers.windsurf._windsurf_global_rules", return_value=self._rules_path()),
+            patch("skills.get_skills_dir", return_value=self.home / ".apc" / "skills"),
+        ):
+            applier = self._make_applier()
+            applier.sync_skills_dir()
+
+            import shutil
+
+            shutil.rmtree(self.home / ".apc" / "skills" / "pdf")
+            result = applier.remove_installed_skill("pdf")
+
+        assert result is True
+        content = self._rules_path().read_text()
+        assert "<!-- apc-skills-start -->" in content
+        assert "pdf" not in content
+
+
+# ---------------------------------------------------------------------------
+# CopilotApplier: remove_installed_skill
+# ---------------------------------------------------------------------------
+
+
+class TestCopilotRemoveSkill(unittest.TestCase):
+    def setUp(self):
+        import tempfile
+
+        self._tmp = tempfile.TemporaryDirectory()
+        self.home = Path(self._tmp.name)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _make_applier(self):
+        from appliers.copilot import CopilotApplier
+
+        applier = CopilotApplier()
+        applier._global_instructions_dir = lambda: self.home / ".github" / "instructions"
+        return applier
+
+    def test_remove_deletes_dangling_symlink(self):
+        """remove_installed_skill removes the .instructions.md symlink for the skill."""
+        _make_skills_dir(self.home, "pdf")
+
+        with patch("skills.get_skills_dir", return_value=self.home / ".apc" / "skills"):
+            applier = self._make_applier()
+            applier.apply_installed_skill("pdf")  # create symlink
+
+        # Simulate skill deletion (symlink is now dangling)
+        import shutil
+
+        shutil.rmtree(self.home / ".apc" / "skills" / "pdf")
+
+        result = applier.remove_installed_skill("pdf")
+
+        instr_dir = self.home / ".github" / "instructions"
+        assert result is True
+        assert not (instr_dir / "pdf.instructions.md").exists()
+
+    def test_remove_keeps_other_skill_symlinks(self):
+        """Only the targeted skill's symlink is removed."""
+        _make_skills_dir(self.home, "pdf", "frontend-design")
+
+        with patch("skills.get_skills_dir", return_value=self.home / ".apc" / "skills"):
+            applier = self._make_applier()
+            applier.sync_skills_dir()
+
+        import shutil
+
+        shutil.rmtree(self.home / ".apc" / "skills" / "pdf")
+        applier.remove_installed_skill("pdf")
+
+        instr_dir = self.home / ".github" / "instructions"
+        assert not (instr_dir / "pdf.instructions.md").exists()
+        assert (instr_dir / "frontend-design.instructions.md").is_symlink()
+
+    def test_remove_returns_false_when_no_symlink(self):
+        """Returns False when the symlink doesn't exist (already clean)."""
+        applier = self._make_applier()
+        result = applier.remove_installed_skill("nonexistent")
+        assert result is False
+
+    def test_remove_does_not_touch_real_files(self):
+        """remove_installed_skill ignores real (non-symlink) instruction files."""
+        instr_dir = self.home / ".github" / "instructions"
+        instr_dir.mkdir(parents=True, exist_ok=True)
+        real = instr_dir / "pdf.instructions.md"
+        real.write_text("# Manual", encoding="utf-8")
+
+        applier = self._make_applier()
+        result = applier.remove_installed_skill("pdf")
+
+        assert result is False  # not a symlink — left untouched
+        assert real.exists()
+
+
+# ---------------------------------------------------------------------------
+# propagate_remove_to_synced_tools
+# ---------------------------------------------------------------------------
+
+
+class TestPropagateRemoveToSyncedTools(unittest.TestCase):
+    def test_calls_remove_for_all_synced_tools(self):
+        from install import propagate_remove_to_synced_tools
+
+        mock_windsurf = MagicMock()
+        mock_copilot = MagicMock()
+        mock_cursor = MagicMock()
+
+        not_synced = MagicMock()
+        not_synced.is_first_sync = True
+        synced = MagicMock()
+        synced.is_first_sync = False
+
+        def fake_manifest(name):
+            return not_synced if name == "claude-code" else synced
+
+        appliers = {
+            "windsurf": mock_windsurf,
+            "github-copilot": mock_copilot,
+            "cursor": mock_cursor,
+        }
+
+        def fake_get_applier(name):
+            return appliers[name]
+
+        with (
+            patch(
+                "install.detect_installed_tools",
+                return_value=["windsurf", "github-copilot", "cursor", "claude-code"],
+            ),
+            patch("appliers.manifest.ToolManifest", side_effect=fake_manifest),
+            patch("install.get_applier", side_effect=fake_get_applier),
+        ):
+            propagate_remove_to_synced_tools("pdf")
+
+        mock_windsurf.remove_installed_skill.assert_called_once_with("pdf")
+        mock_copilot.remove_installed_skill.assert_called_once_with("pdf")
+        mock_cursor.remove_installed_skill.assert_called_once_with("pdf")
+
+    def test_skips_unsynced_tools(self):
+        from install import propagate_remove_to_synced_tools
+
+        not_synced = MagicMock()
+        not_synced.is_first_sync = True
+
+        with (
+            patch("install.detect_installed_tools", return_value=["cursor"]),
+            patch("appliers.manifest.ToolManifest", return_value=not_synced),
+            patch("install.get_applier") as mock_get,
+        ):
+            propagate_remove_to_synced_tools("pdf")
+
+        mock_get.assert_not_called()
+
+    def test_exception_does_not_abort(self):
+        from install import propagate_remove_to_synced_tools
+
+        mock_ok = MagicMock()
+        mock_bad = MagicMock()
+        mock_bad.remove_installed_skill.side_effect = RuntimeError("boom")
+
+        synced = MagicMock()
+        synced.is_first_sync = False
+
+        with (
+            patch("install.detect_installed_tools", return_value=["windsurf", "cursor"]),
+            patch("appliers.manifest.ToolManifest", return_value=synced),
+            patch(
+                "install.get_applier",
+                side_effect=lambda n: mock_bad if n == "windsurf" else mock_ok,
+            ),
+        ):
+            propagate_remove_to_synced_tools("pdf")
+
+        mock_ok.remove_installed_skill.assert_called_with("pdf")
+        assert mock_ok.remove_installed_skill.call_count >= 1
+
+
 if __name__ == "__main__":
     unittest.main()

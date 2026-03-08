@@ -152,6 +152,15 @@ class WindsurfApplier(BaseApplier):
         self._write_skills_to_global_rules()
         return True
 
+    def remove_installed_skill(self, name: str) -> bool:  # type: ignore[override]
+        """Regenerate the APC skills block after a skill is uninstalled.
+
+        The deleted skill is already gone from ~/.apc/skills/ at this point,
+        so _write_skills_to_global_rules() will naturally omit it.
+        """
+        self._write_skills_to_global_rules()
+        return True
+
     def unsync_skills(self) -> bool:  # type: ignore[override]
         """Remove the APC skills section from global_rules.md."""
         rules_path = _windsurf_global_rules()

@@ -63,6 +63,18 @@ def save_skill_file(skill_name: str, raw_content: str) -> Path:
     return path
 
 
+def delete_skill_file(skill_name: str) -> bool:
+    """Remove ~/.apc/skills/<name>/ and its contents. Returns True if deleted."""
+    skill_name = sanitize_skill_name(skill_name)
+    skill_dir = get_skills_dir() / skill_name
+    if not skill_dir.exists():
+        return False
+    import shutil
+
+    shutil.rmtree(skill_dir)
+    return True
+
+
 # ---------------------------------------------------------------------------
 # GitHub helpers
 # ---------------------------------------------------------------------------

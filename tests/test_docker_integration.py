@@ -1722,3 +1722,119 @@ class TestCopilotPerFileSync:
         instr_dir = self._instr_dir(tmp_path)
         assert (instr_dir / f"{self.SKILL_A}.instructions.md").is_symlink()
         assert (instr_dir / f"{self.SKILL_B}.instructions.md").is_symlink()
+
+
+# ---------------------------------------------------------------------------
+# Phase 15: apc skill remove — non-symlink tool cleanup
+# ---------------------------------------------------------------------------
+
+
+class TestSkillRemoveNonSymlinkTools:
+    """End-to-end: apc skill remove cleans up Windsurf injection and Copilot symlinks."""
+
+    TEST_REPO = "anthropics/skills"
+    SKILL_A = "pdf"
+    SKILL_B = "skill-creator"
+
+    # -- Windsurf -------------------------------------------------------
+
+    def test_remove_updates_windsurf_injection(self, runner, cli, tmp_path, monkeypatch):
+        """After skill remove, Windsurf global_rules.md no longer lists the skill."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        ws_dir = tmp_path / ".codeium" / "windsurf" / "memories"
+        ws_dir.mkdir(parents=True, exist_ok=True)
+
+        runner.invoke(cli, ["install", self.TEST_REPO, "--skill", self.SKILL_A, "-y"])
+        runner.invoke(cli, ["install", self.TEST_REPO, "--skill", self.SKILL_B, "-y"])
+        runner.invoke(cli, ["sync", "--tools", "windsurf", "--yes"])
+
+        r = runner.invoke(cli, ["skill", "remove", self.SKILL_A, "--yes"])
+        assert r.exit_code == 0, r.output
+
+        content = (ws_dir / "global_rules.md").read_text()
+        assert self.SKILL_A not in content
+        assert self.SKILL_B in content
+
+    def test_remove_keeps_windsurf_block_with_remaining(self, runner, cli, tmp_path, monkeypatch):
+        """APC Skills block stays intact; only the removed skill is omitted."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        ws_dir = tmp_path / ".codeium" / "windsurf" / "memories"
+        ws_dir.mkdir(parents=True, exist_ok=True)
+
+        runner.invoke(cli, ["install", self.TEST_REPO, "--skill", self.SKILL_A, "-y"])
+        runner.invoke(cli, ["install", self.TEST_REPO, "--skill", self.SKILL_B, "-y"])
+        runner.invoke(cli, ["sync", "--tools", "windsurf", "--yes"])
+        runner.invoke(cli, ["skill", "remove", self.SKILL_A, "--yes"])
+
+        content = (ws_dir / "global_rules.md").read_text()
+        assert "<!-- apc-skills-start -->" in content
+        assert "<!-- apc-skills-end -->" in content
+
+    def test_remove_last_skill_leaves_empty_block(self, runner, cli, tmp_path, monkeypatch):
+        """Removing the last skill leaves a valid (empty) APC Skills block."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        ws_dir = tmp_path / ".codeium" / "windsurf" / "memories"
+        ws_dir.mkdir(parents=True, exist_ok=True)
+
+        runner.invoke(cli, ["install", self.TEST_REPO, "--skill", self.SKILL_A, "-y"])
+        runner.invoke(cli, ["sync", "--tools", "windsurf", "--yes"])
+        runner.invoke(cli, ["skill", "remove", self.SKILL_A, "--yes"])
+
+        content = (ws_dir / "global_rules.md").read_text()
+        assert "<!-- apc-skills-start -->" in content
+        assert self.SKILL_A not in content
+
+    # -- Copilot --------------------------------------------------------
+
+    def test_remove_deletes_copilot_symlink(self, runner, cli, tmp_path, monkeypatch):
+        """After skill remove, the .instructions.md symlink is gone."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        (tmp_path / ".copilot").mkdir(parents=True, exist_ok=True)
+
+        runner.invoke(cli, ["install", self.TEST_REPO, "--skill", self.SKILL_A, "-y"])
+        runner.invoke(cli, ["sync", "--tools", "github-copilot", "--yes"])
+
+        r = runner.invoke(cli, ["skill", "remove", self.SKILL_A, "--yes"])
+        assert r.exit_code == 0, r.output
+
+        instr_dir = tmp_path / ".github" / "instructions"
+        assert not (instr_dir / f"{self.SKILL_A}.instructions.md").exists()
+
+    def test_remove_keeps_other_copilot_symlinks(self, runner, cli, tmp_path, monkeypatch):
+        """Only the removed skill's symlink is deleted; others remain."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        (tmp_path / ".copilot").mkdir(parents=True, exist_ok=True)
+
+        runner.invoke(cli, ["install", self.TEST_REPO, "--skill", self.SKILL_A, "-y"])
+        runner.invoke(cli, ["install", self.TEST_REPO, "--skill", self.SKILL_B, "-y"])
+        runner.invoke(cli, ["sync", "--tools", "github-copilot", "--yes"])
+        runner.invoke(cli, ["skill", "remove", self.SKILL_A, "--yes"])
+
+        instr_dir = tmp_path / ".github" / "instructions"
+        assert not (instr_dir / f"{self.SKILL_A}.instructions.md").exists()
+        assert (instr_dir / f"{self.SKILL_B}.instructions.md").is_symlink()
+
+    def test_remove_skill_also_deletes_from_apc_skills(self, runner, cli, tmp_path, monkeypatch):
+        """Skill dir in ~/.apc/skills/ is deleted regardless of sync state."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        runner.invoke(cli, ["install", self.TEST_REPO, "--skill", self.SKILL_A, "-y"])
+
+        skill_md = tmp_path / ".apc" / "skills" / self.SKILL_A / "SKILL.md"
+        assert skill_md.exists()
+
+        runner.invoke(cli, ["skill", "remove", self.SKILL_A, "--yes"])
+        assert not skill_md.exists()
+
+    def test_remove_unknown_skill_warns_gracefully(self, runner, cli, tmp_path, monkeypatch):
+        """Removing a skill that doesn't exist prints a warning and exits cleanly."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        r = runner.invoke(cli, ["skill", "remove", "nonexistent-skill-xyz", "--yes"])
+        assert r.exit_code == 0
+        assert "not found" in r.output.lower() or "nothing" in r.output.lower()
+
+    def test_remove_no_sync_does_not_crash(self, runner, cli, tmp_path, monkeypatch):
+        """Removing a skill when no tools are synced completes without error."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        runner.invoke(cli, ["install", self.TEST_REPO, "--skill", self.SKILL_A, "-y"])
+        r = runner.invoke(cli, ["skill", "remove", self.SKILL_A, "--yes"])
+        assert r.exit_code == 0

@@ -185,6 +185,15 @@ class BaseApplier(ABC):
         """
         return False  # dir-symlink tools need no action
 
+    def remove_installed_skill(self, name: str) -> bool:
+        """Clean up after a skill is uninstalled from ~/.apc/skills/.
+
+        Dir-symlink tools: no-op — the skill dir vanishes automatically.
+        Override in tools that maintain per-skill state (Windsurf, Copilot).
+        Returns True if an action was taken, False if no-op.
+        """
+        return False  # dir-symlink tools need no cleanup
+
     def unsync_skills(self) -> bool:
         """Undo the skill sync for this tool.
 

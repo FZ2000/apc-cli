@@ -51,6 +51,27 @@ def _validate_branch(branch: str) -> None:
 _AGENTS = ["claude-code", "cursor", "gemini-cli", "github-copilot", "openclaw", "windsurf"]
 
 
+def propagate_remove_to_synced_tools(skill_name: str) -> None:
+    """Notify all synced tools that a skill has been uninstalled.
+
+    - Dir-symlink tools: no-op — the skill dir is already gone from the symlink.
+    - Windsurf: regenerates global_rules.md block (deleted skill won't appear).
+    - Copilot: removes the now-dangling .instructions.md symlink.
+    """
+    from appliers.manifest import ToolManifest
+    from extractors import detect_installed_tools
+
+    for tool_name in detect_installed_tools():
+        manifest = ToolManifest(tool_name)
+        if manifest.is_first_sync:
+            continue
+        try:
+            applier = get_applier(tool_name)
+            applier.remove_installed_skill(skill_name)
+        except Exception:
+            pass
+
+
 def _propagate_to_synced_tools(skill_name: str) -> None:
     """Push a newly installed skill to every tool that has been synced.
 

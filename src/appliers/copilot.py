@@ -142,6 +142,14 @@ class CopilotApplier(BaseApplier):
         self._link_skill(name, skill_md, instr_dir)
         return True
 
+    def remove_installed_skill(self, name: str) -> bool:  # type: ignore[override]
+        """Remove the dangling .instructions.md symlink for an uninstalled skill."""
+        link = self._global_instructions_dir() / f"{name}.instructions.md"
+        if link.is_symlink():
+            link.unlink()
+            return True
+        return False
+
     def unsync_skills(self) -> bool:  # type: ignore[override]
         """Remove all apc-managed .instructions.md symlinks from ~/.github/instructions/."""
         instr_dir = self._global_instructions_dir()
