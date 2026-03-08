@@ -17,9 +17,9 @@ def _mock_applier(tmpdir: Path, tool: str = "cursor"):
     """Return a MagicMock that satisfies the applier interface."""
     applier = MagicMock()
     applier.get_manifest.return_value = _make_manifest(tmpdir, tool)
-    applier.SKILL_DIR_EXCLUSIVE = False  # default: per-skill symlinks
+    applier.SKILL_DIR_EXCLUSIVE = True  # all tools use dir-level symlink by default
     applier.SKILL_DIR = tmpdir / "skills"
-    applier.sync_skills_dir.return_value = False  # per-skill tool by default
+    applier.sync_skills_dir.return_value = True  # dir-level symlink succeeds
     applier.apply_skills.return_value = 3
     applier.link_skills.return_value = 1
     applier.apply_mcp_servers.return_value = 2
@@ -114,7 +114,7 @@ class TestSyncAll(unittest.TestCase):
         self._run_sync_all(["cursor"], factory)
 
         appliers["cursor"].sync_skills_dir.assert_called_once()
-        appliers["cursor"].link_skills.assert_called_once()
+        appliers["cursor"].link_skills.assert_not_called()
         appliers["cursor"].apply_skills.assert_not_called()
         appliers["cursor"].apply_mcp_servers.assert_called_once()
         appliers["cursor"].apply_memory_via_llm.assert_called_once()
@@ -175,8 +175,7 @@ class TestSyncSkillsPerToolCounter(unittest.TestCase):
 
         def factory(tmpdir_inner, name):
             a = _mock_applier(tmpdir_inner, name)
-            a.sync_skills_dir.return_value = False  # per-skill tool
-            a.link_skills.return_value = 3
+            a.sync_skills_dir.return_value = True  # dir-level sync
             return a
 
         with (
@@ -193,9 +192,9 @@ class TestSyncSkillsPerToolCounter(unittest.TestCase):
 
             sync_skills(["cursor", "claude-code"])
 
-        # Each message should say 3 skill(s) linked, not cumulative 6
+        # Each message should say symlinked, not cumulative counts
         for msg in success_messages:
-            self.assertIn("3 skill(s) linked", msg, f"Expected '3 skill(s) linked' in: {msg}")
+            self.assertIn("symlinked", msg, f"Expected 'symlinked' in: {msg}")
 
 
 if __name__ == "__main__":
