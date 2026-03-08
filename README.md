@@ -99,9 +99,6 @@ apc configure
 # Check the installed version
 apc --version
 # apc, version 0.1.1
-
-# Run a health check on your environment
-apc doctor
 ```
 
 ### Core Workflow
