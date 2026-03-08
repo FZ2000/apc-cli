@@ -1133,12 +1133,29 @@ class TestRoundTrip:
         r = runner.invoke(cli, ["sync", "--tools", "claude-code", "--yes", "--no-memory"])
         assert r.exit_code == 0
 
-        # Verify MCP servers in claude.json include servers from other tools
+        # By default only claude-code's own servers are synced back (#44)
         data = json.loads((HOME / ".claude.json").read_text())
         mcp_names = set(data.get("mcpServers", {}).keys())
-        # Should have cursor, gemini, copilot, windsurf MCP servers synced
-        for expected in ["test-cursor-mcp", "test-gemini-mcp", "test-windsurf-mcp"]:
-            assert expected in mcp_names, f"{expected} not found in claude.json mcpServers"
+        assert "test-claude-mcp" in mcp_names, "claude's own server should be synced"
+        # Cross-tool servers are NOT synced by default (require --all-sources-mcp)
+        for cross_tool in ["test-cursor-mcp", "test-gemini-mcp", "test-windsurf-mcp"]:
+            assert cross_tool not in mcp_names, f"{cross_tool} should not be in claude.json"
+
+    def test_collect_then_sync_claude_all_sources(self, runner, cli):
+        """With --all-sources-mcp, all cached MCP servers are synced to every tool."""
+        r = runner.invoke(cli, ["collect", "--yes"])
+        assert r.exit_code == 0
+
+        r = runner.invoke(
+            cli, ["sync", "--tools", "claude-code", "--yes", "--no-memory", "--all-sources-mcp"]
+        )
+        assert r.exit_code == 0
+
+        data = json.loads((HOME / ".claude.json").read_text())
+        mcp_names = set(data.get("mcpServers", {}).keys())
+        # All servers from all tools should be present with --all-sources-mcp
+        for expected in ["test-claude-mcp", "test-cursor-mcp", "test-gemini-mcp"]:
+            assert expected in mcp_names, f"{expected} not found with --all-sources-mcp"
 
     def test_collect_then_sync_cursor_override(self, runner, cli):
         """Collect, sync to cursor with --override-mcp, verify only cache servers remain."""

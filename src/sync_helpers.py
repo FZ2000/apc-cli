@@ -107,8 +107,38 @@ def sync_skills(tool_list: List[str]) -> Tuple[int, int]:
     return total_dir, 0
 
 
-def sync_mcp(tool_list: List[str], override: bool = False) -> int:
-    """Apply MCP servers from cache to tools. Returns count."""
+def _filter_mcp_for_tool(servers: List[Dict], tool_name: str, all_sources: bool) -> List[Dict]:
+    """Return only the servers that should be applied to a given tool.
+
+    By default (all_sources=False) we apply a server to a tool only when:
+    - source_tool matches tool_name (server originated from this tool), OR
+    - targets is a non-empty list that explicitly includes this tool.
+
+    When all_sources=True every server is applied regardless of origin —
+    this replicates the previous (pre-#44) broadcast behaviour and can be
+    requested via ``apc mcp sync --all-sources``.
+    """
+    if all_sources:
+        return servers
+
+    result = []
+    for s in servers:
+        source = s.get("source_tool", "")
+        targets = s.get("targets", [])
+        if source == tool_name:
+            result.append(s)
+        elif targets and tool_name in targets:
+            result.append(s)
+    return result
+
+
+def sync_mcp(tool_list: List[str], override: bool = False, all_sources: bool = False) -> int:
+    """Apply MCP servers from cache to tools. Returns count.
+
+    By default only syncs each server back to the tool it originated from
+    (source_tool == tool_name) or tools explicitly listed in its targets.
+    Pass all_sources=True to restore the old broadcast behaviour (#44).
+    """
     mcp_servers = load_mcp_servers()
 
     if not mcp_servers:
@@ -124,7 +154,6 @@ def sync_mcp(tool_list: List[str], override: bool = False) -> int:
             "Ensure those files are excluded from version control."
         )
 
-    current_mcp_names = [s.get("name", "unnamed") for s in mcp_servers]
     total = 0
 
     for tool_name in tool_list:
@@ -132,8 +161,10 @@ def sync_mcp(tool_list: List[str], override: bool = False) -> int:
             applier = get_applier(tool_name)
             manifest = applier.get_manifest()
 
-            secrets = _resolve_all_mcp_secrets(mcp_servers)
-            m = applier.apply_mcp_servers(mcp_servers, secrets, manifest, override=override)
+            tool_servers = _filter_mcp_for_tool(mcp_servers, tool_name, all_sources)
+            current_mcp_names = [s.get("name", "unnamed") for s in tool_servers]
+            secrets = _resolve_all_mcp_secrets(tool_servers)
+            m = applier.apply_mcp_servers(tool_servers, secrets, manifest, override=override)
             # Prune orphaned MCP servers (keep skill names empty — not our concern)
             applier.prune([], current_mcp_names, manifest)
             manifest.save()
@@ -173,7 +204,12 @@ def sync_memory(tool_list: List[str]) -> int:
     return total
 
 
-def sync_all(tool_list: List[str], no_memory: bool = False, override_mcp: bool = False) -> bool:
+def sync_all(
+    tool_list: List[str],
+    no_memory: bool = False,
+    override_mcp: bool = False,
+    all_sources_mcp: bool = False,
+) -> bool:
     """Apply everything (skills + MCP + memory). Used by `apc sync`.
 
     Returns True if at least one tool was synced successfully, False otherwise.
@@ -183,7 +219,6 @@ def sync_all(tool_list: List[str], no_memory: bool = False, override_mcp: bool =
     memory_entries = bundle["memory"] if not no_memory else []
 
     skills_dir = get_skills_dir()
-    current_mcp_names = [s.get("name", "unnamed") for s in mcp_servers]
 
     total_skills = 0
     total_mcp = 0
@@ -200,9 +235,11 @@ def sync_all(tool_list: List[str], no_memory: bool = False, override_mcp: bool =
                 manifest.record_dir_sync(str(applier.SKILL_DIR), str(skills_dir))
             s, lk = (1, 0) if applier.SKILL_DIR is not None else (0, 0)
 
-            # MCP servers
-            secrets = _resolve_all_mcp_secrets(mcp_servers)
-            m = applier.apply_mcp_servers(mcp_servers, secrets, manifest, override=override_mcp)
+            # MCP servers — filter to this tool's servers by default (#44)
+            tool_mcp = _filter_mcp_for_tool(mcp_servers, tool_name, all_sources_mcp)
+            current_mcp_names = [sv.get("name", "unnamed") for sv in tool_mcp]
+            secrets = _resolve_all_mcp_secrets(tool_mcp)
+            m = applier.apply_mcp_servers(tool_mcp, secrets, manifest, override=override_mcp)
 
             # Memory
             mem = 0

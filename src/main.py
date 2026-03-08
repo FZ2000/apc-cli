@@ -89,9 +89,15 @@ cli.add_command(import_cmd)
 @click.option(
     "--override-mcp", is_flag=True, help="Replace existing MCP servers instead of merging"
 )
+@click.option(
+    "--all-sources-mcp",
+    "all_sources_mcp",
+    is_flag=True,
+    help="Broadcast ALL cached MCP servers to every tool, ignoring source_tool origin.",
+)
 @click.option("--dry-run", is_flag=True, help="Show what would be applied without writing")
 @click.option("--yes", "-y", is_flag=True, help="Skip confirmation prompt")
-def sync(tools, apply_all, no_memory, override_mcp, dry_run, yes):
+def sync(tools, apply_all, no_memory, override_mcp, all_sources_mcp, dry_run, yes):
     """Sync local cache contents to target AI tools.
 
     No login or network required.
@@ -169,7 +175,9 @@ def sync(tools, apply_all, no_memory, override_mcp, dry_run, yes):
             info("Cancelled.")
             return
 
-    ok = sync_all(tool_list, no_memory=no_memory, override_mcp=override_mcp)
+    ok = sync_all(
+        tool_list, no_memory=no_memory, override_mcp=override_mcp, all_sources_mcp=all_sources_mcp
+    )
     if not ok:
         raise SystemExit(1)
 

@@ -83,7 +83,13 @@ def merge_skills(existing: List[Dict], new: List[Dict]) -> List[Dict]:
 
 
 def merge_mcp_servers(existing: List[Dict], new: List[Dict]) -> List[Dict]:
-    """Merge new MCP servers into existing by (source_tool, name) key. Upsert only."""
+    """Merge new MCP servers into existing by (source_tool, name) key. Upsert only.
+
+    Keying by both source_tool and name preserves source attribution when the
+    same server name is configured in multiple tools (#47).  This also ensures
+    that each tool's servers remain distinct in the cache, enabling source-aware
+    filtering during sync (#44).
+    """
     index = {(_key_mcp(s)): s for s in existing}
     for s in new:
         index[_key_mcp(s)] = s
@@ -127,11 +133,13 @@ def merge_memory(existing: List[Dict], new: List[Dict]) -> List[Dict]:
 
 
 def _key_mcp(s: Dict) -> str:
-    """Deduplicate MCP servers by name only.
+    """Deduplicate MCP servers by (source_tool, name).
 
-    The same logical MCP server can be collected from multiple tools
-    (e.g. a shared server configured in both Claude and Cursor). Keying
-    by name alone ensures we keep one canonical entry (last collected wins)
-    instead of accumulating one entry per source tool.
+    Keying by name alone caused source_tool misattribution when the same
+    server name appeared in multiple tools — whichever was collected last
+    would overwrite the earlier entry's source_tool (#47).
+
+    Keying by (source_tool, name) preserves each tool's entry separately with
+    correct attribution, and enables source-aware filtering during sync (#44).
     """
-    return s.get("name", "")
+    return f"{s.get('source_tool', '')}:{s.get('name', '')}"
