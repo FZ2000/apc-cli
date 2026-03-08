@@ -86,15 +86,15 @@ def _resolve_targets(target_args: tuple, yes: bool) -> List[str]:
 def _note_per_skill_tools(target_list: list) -> None:
     """Warn if any synced target uses per-skill symlinks (not dir-level).
 
-    For SKILL_DIR_EXCLUSIVE tools (OpenClaw, Claude Code), the dir symlink is
-    already live — new skills in ~/.apc/skills/ appear immediately.
-    For mixed-dir tools (Cursor, Copilot), the user must re-run `apc sync`.
+    For tools with SKILL_DIR set, the dir symlink is already live after
+    apc sync — new skills in ~/.apc/skills/ appear immediately.
+    For Copilot (no SKILL_DIR), re-run `apc sync` to pick up new skills.
     """
     needs_sync = []
     for target_name in target_list:
         try:
             applier = get_applier(target_name)
-            if not applier.SKILL_DIR_EXCLUSIVE and applier.SKILL_DIR is not None:
+            if applier.SKILL_DIR is None:
                 needs_sync.append(target_name)
         except Exception:
             pass

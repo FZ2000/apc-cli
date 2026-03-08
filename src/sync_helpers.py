@@ -93,7 +93,7 @@ def sync_skills(tool_list: List[str]) -> Tuple[int, int]:
                 total_dir += 1
                 success(f"{tool_name}: skills dir symlinked → ~/.apc/skills/")
             else:
-                success(f"{tool_name}: no skills dir to sync (SKILL_DIR_EXCLUSIVE=False)")
+                success(f"{tool_name}: no skills dir (SKILL_DIR=None) — skipping")
 
         except Exception as e:
             error(f"Failed to sync skills to {tool_name}: {e}")
@@ -192,7 +192,7 @@ def sync_all(tool_list: List[str], no_memory: bool = False, override_mcp: bool =
             # Establish dir-level symlink: SKILL_DIR → ~/.apc/skills/
             if applier.sync_skills_dir():
                 manifest.record_dir_sync(str(applier.SKILL_DIR), str(skills_dir))
-            s, lk = (1, 0) if applier.SKILL_DIR_EXCLUSIVE and applier.SKILL_DIR else (0, 0)
+            s, lk = (1, 0) if applier.SKILL_DIR is not None else (0, 0)
 
             # MCP servers
             secrets = _resolve_all_mcp_secrets(mcp_servers)

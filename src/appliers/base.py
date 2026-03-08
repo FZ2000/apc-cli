@@ -66,12 +66,6 @@ class BaseApplier(ABC):
     SKILL_DIR: Optional[Path] = None
     TOOL_NAME: str = ""
 
-    # When True, apc sync replaces the entire SKILL_DIR with a single symlink
-    # → ~/.apc/skills/ so any future `apc install` is immediately live.
-    # All tools default to True. Set False only for tools that cannot use a
-    # dir-level symlink (e.g. Copilot, which has no dedicated skills dir).
-    SKILL_DIR_EXCLUSIVE = True
-
     # Subclasses that support LLM-based memory sync should override this
     # with a description of how the tool expects its memory files.
     MEMORY_SCHEMA: str = ""
@@ -149,7 +143,7 @@ class BaseApplier(ABC):
     def sync_skills_dir(self) -> bool:
         """Establish a dir-level symlink: SKILL_DIR → ~/.apc/skills/.
 
-        Only applies when SKILL_DIR_EXCLUSIVE=True (dir is entirely apc-managed).
+        Only applies when SKILL_DIR is set on the applier.
         After this runs once, any future `apc install` is immediately live in
         this tool without re-running sync.
 
@@ -157,7 +151,7 @@ class BaseApplier(ABC):
         """
         from skills import get_skills_dir
 
-        if not self.SKILL_DIR_EXCLUSIVE or self.SKILL_DIR is None:
+        if self.SKILL_DIR is None:
             return False
 
         skills_source = get_skills_dir()

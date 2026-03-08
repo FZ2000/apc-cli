@@ -17,7 +17,6 @@ def _mock_applier(tmpdir: Path, tool: str = "cursor"):
     """Return a MagicMock that satisfies the applier interface."""
     applier = MagicMock()
     applier.get_manifest.return_value = _make_manifest(tmpdir, tool)
-    applier.SKILL_DIR_EXCLUSIVE = True  # all tools use dir-level symlink by default
     applier.SKILL_DIR = tmpdir / "skills"
     applier.sync_skills_dir.return_value = True  # dir-level symlink succeeds
     applier.apply_skills.return_value = 3
