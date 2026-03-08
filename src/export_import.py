@@ -28,7 +28,7 @@ from cache import (
     save_skills,
 )
 from config import get_config_dir
-from secrets_manager import retrieve_secret, store_secrets_batch
+from secrets_manager import retrieve_secret, scrub_content, store_secrets_batch
 from skills import get_skills_dir
 from ui import error, header, info, success, warning
 
@@ -292,8 +292,13 @@ def export_cmd(path: str, no_secrets: bool, yes: bool):
     (export_dir / "cache").mkdir(exist_ok=True)
     (export_dir / "config").mkdir(exist_ok=True)
 
-    # 1. Cache: skills.json (plain)
-    (export_dir / "cache" / "skills.json").write_text(json.dumps(skills, indent=2, default=str))
+    # 1. Cache: skills.json — scrub secret values from skill body text
+    scrubbed_skills = [
+        {**s, "body": scrub_content(s["body"])} if "body" in s else s for s in skills
+    ]
+    (export_dir / "cache" / "skills.json").write_text(
+        json.dumps(scrubbed_skills, indent=2, default=str)
+    )
 
     # 2. Cache: mcp_servers.json (with encrypted secrets)
     exported_mcp = _export_mcp_servers(mcp_servers, public_key)
@@ -301,8 +306,13 @@ def export_cmd(path: str, no_secrets: bool, yes: bool):
         json.dumps(exported_mcp, indent=2, default=str)
     )
 
-    # 3. Cache: memory.json (plain)
-    (export_dir / "cache" / "memory.json").write_text(json.dumps(memory, indent=2, default=str))
+    # 3. Cache: memory.json — scrub secret values from memory content
+    scrubbed_memory = [
+        {**m, "content": scrub_content(m["content"])} if "content" in m else m for m in memory
+    ]
+    (export_dir / "cache" / "memory.json").write_text(
+        json.dumps(scrubbed_memory, indent=2, default=str)
+    )
 
     # 4. Installed skills directory (resolve symlinks)
     if installed_skills:

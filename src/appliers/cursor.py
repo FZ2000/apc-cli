@@ -2,6 +2,7 @@
 
 import json
 import os
+import stat
 from pathlib import Path
 from typing import Dict, List
 
@@ -180,6 +181,8 @@ class CursorApplier(BaseApplier):
         data["mcpServers"] = mcp_servers
         mcp_json.parent.mkdir(parents=True, exist_ok=True)
         mcp_json.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        # Restrict to owner-only since the file may contain resolved API keys (#32)
+        os.chmod(mcp_json, stat.S_IRUSR | stat.S_IWUSR)
         return count
 
     def _read_existing_memory_files(self) -> Dict[str, str]:
