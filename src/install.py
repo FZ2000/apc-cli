@@ -214,18 +214,26 @@ def install(repo, skills, install_all, targets, branch, list_only, yes):
     # Fetch and install
     installed_skills = []
     for skill_name in skill_names:
-        click.echo(f"  Fetching {skill_name}...", nl=False)
         skill = fetch_skill_from_repo(repo, skill_name, branch)
         if not skill:
-            click.echo(f" not found in {repo}")
+            click.echo(f"  ! {skill_name}: not found in {repo}", err=True)
             continue
 
         # Validate name once more before writing to disk (save_skill_file also validates)
         try:
             sanitize_skill_name(skill["name"])
         except ValueError as exc:
-            click.echo(f" skipped — invalid name: {exc}", err=True)
+            click.echo(f"  ! {skill_name}: skipped — invalid name: {exc}", err=True)
             continue
+
+        # Display integrity info for user audit (#29)
+        commit_sha = skill.pop("_commit_sha", None)
+        content_checksum = skill.pop("_content_checksum", None)
+        sha_display = commit_sha[:12] if commit_sha else "unknown"
+        checksum_short = content_checksum.split(":")[1][:16] if content_checksum else "?"
+        click.echo(
+            f"  Fetching {skill['name']} from {repo} @ {sha_display} (sha256:{checksum_short}...)"
+        )
 
         # Save to ~/.apc/skills/<name>/SKILL.md
         raw_content = skill.pop("_raw_content", skill.get("body", ""))
@@ -240,7 +248,7 @@ def install(repo, skills, install_all, targets, branch, list_only, yes):
         save_skills(merged)
 
         installed_skills.append(skill["name"])
-        click.echo(" ✓")
+        click.echo(f"  ✓ {skill['name']} installed")
 
     if installed_skills:
         click.echo(f"\n✓ Installed {len(installed_skills)} skill(s) to {', '.join(target_list)}")

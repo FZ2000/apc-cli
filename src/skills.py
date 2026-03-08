@@ -4,6 +4,7 @@ Skills are stored in ~/.apc/skills/<name>/SKILL.md and linked into each
 tool's skill directory on sync.
 """
 
+import hashlib
 import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -16,6 +17,9 @@ from frontmatter_parser import parse_frontmatter
 DEFAULT_BRANCH = "main"
 _GITHUB_TREE_API = "https://api.github.com/repos/{repo}/git/trees/{branch}?recursive=1"
 _GITHUB_RAW = "https://raw.githubusercontent.com/{repo}/{branch}/skills/{skill}/SKILL.md"
+_GITHUB_COMMITS_API = (
+    "https://api.github.com/repos/{repo}/commits?path=skills/{skill}/SKILL.md&per_page=1"
+)
 
 _SKILL_NAME_SAFE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_\-]{0,63}$")
 
@@ -105,6 +109,26 @@ def list_skills_in_repo(repo: str, branch: str = DEFAULT_BRANCH) -> List[str]:
     return sorted(names)
 
 
+def _fetch_skill_commit_sha(repo: str, skill_name: str) -> Optional[str]:
+    """Return the latest commit SHA for a skill file, or None on error.
+
+    Uses the GitHub Commits API with a path filter so we get the SHA of the
+    commit that last touched skills/<skill_name>/SKILL.md.  This is
+    displayed at install-time so users can audit the exact version (#29).
+    """
+    url = _GITHUB_COMMITS_API.format(repo=repo, skill=skill_name)
+    try:
+        resp = _safe_get(url)
+        if resp.status_code != 200:
+            return None
+        data = resp.json()
+        if isinstance(data, list) and data:
+            return data[0].get("sha")
+    except (httpx.HTTPError, Exception):
+        pass
+    return None
+
+
 def fetch_skill_from_repo(
     repo: str,
     skill_name: str,
@@ -112,7 +136,9 @@ def fetch_skill_from_repo(
 ) -> Optional[Dict[str, Any]]:
     """Fetch and parse a single skill from a GitHub repo.
 
-    Returns a skill dict (with _raw_content) or None if not found.
+    Returns a skill dict (with _raw_content and _commit_sha) or None if not found.
+    The _commit_sha field contains the SHA of the last commit that touched the
+    skill file — callers should display this so users can audit the download (#29).
     """
     url = _GITHUB_RAW.format(repo=repo, branch=branch, skill=skill_name)
     try:
@@ -130,6 +156,11 @@ def fetch_skill_from_repo(
     except ValueError:
         # Fall back to the URL-path component (already validated by list_skills_in_repo)
         safe_name = sanitize_skill_name(skill_name)
+
+    # Compute content checksum and fetch commit SHA for integrity display (#29)
+    content_checksum = "sha256:" + hashlib.sha256(resp.text.encode()).hexdigest()
+    commit_sha = _fetch_skill_commit_sha(repo, skill_name)
+
     return {
         "name": safe_name,
         "description": metadata.get("description", ""),
@@ -140,4 +171,6 @@ def fetch_skill_from_repo(
         "source_tool": "github",
         "source_repo": repo,
         "_raw_content": resp.text,
+        "_content_checksum": content_checksum,
+        "_commit_sha": commit_sha,
     }
