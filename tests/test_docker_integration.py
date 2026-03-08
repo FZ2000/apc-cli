@@ -406,29 +406,27 @@ class TestStatus:
         mcp_key,
         supports_skills,
     ):
-        """Deleting a synced skill file causes 'out of sync' for that tool."""
+        """Removing a synced skill link/file causes 'out of sync' for that tool.
+
+        Skills now live in ~/.apc/skills/ (source of truth).
+        - SKILL_DIR_EXCLUSIVE tools (claude-code, openclaw): their skills dir is a
+          single symlink → ~/.apc/skills/. Out-of-sync = symlink removed/broken.
+        - Per-skill tools (cursor): individual link_path entries in the manifest.
+          Out-of-sync = linked file deleted.
+        """
         monkeypatch.setenv("HOME", str(tmp_path))
         monkeypatch.chdir(tmp_path)
         for d in seed_dirs:
             (tmp_path / d).mkdir(parents=True, exist_ok=True)
 
-        # Seed isolated cache then sync — appliers are lazy so all writes go to tmp_path
+        # Seed ~/.apc/skills/test-skill/SKILL.md — the canonical source
+        skills_source = tmp_path / ".apc" / "skills" / "test-skill"
+        skills_source.mkdir(parents=True, exist_ok=True)
+        (skills_source / "SKILL.md").write_text("# Test\nTest skill body.", encoding="utf-8")
+
         cache_dir = tmp_path / ".apc" / "cache"
         cache_dir.mkdir(parents=True, exist_ok=True)
-        (cache_dir / "skills.json").write_text(
-            json.dumps(
-                [
-                    {
-                        "name": "test-skill",
-                        "description": "A test skill",
-                        "body": "Test skill body.",
-                        "tags": ["test"],
-                        "version": "1.0.0",
-                    }
-                ]
-            ),
-            encoding="utf-8",
-        )
+        (cache_dir / "skills.json").write_text("[]", encoding="utf-8")
         (cache_dir / "mcp_servers.json").write_text("[]", encoding="utf-8")
         (cache_dir / "memory.json").write_text("[]", encoding="utf-8")
         runner.invoke(cli, ["sync", "--tools", detected_name, "--yes", "--no-memory"])
@@ -439,14 +437,23 @@ class TestStatus:
             f"{detected_name}: expected synced before delete, got:\n{r1.output}"
         )
 
-        # Find and delete a skill file recorded by the manifest
+        # Break the skill link/symlink to trigger out-of-sync
         manifest_path = tmp_path / ".apc" / "manifests" / f"{applier_tool_name}.json"
         manifest_data = json.loads(manifest_path.read_text())
-        skill_paths = [
-            v["file_path"] for v in manifest_data.get("skills", {}).values() if "file_path" in v
-        ]
-        assert skill_paths, f"no skill file_paths in manifest for {detected_name}"
-        Path(skill_paths[0]).unlink()
+
+        if manifest_data.get("dir_sync"):
+            # Exclusive-dir tool: remove the dir-level symlink
+            skill_dir = Path(manifest_data["dir_sync"]["skill_dir"])
+            skill_dir.unlink()
+        else:
+            # Per-skill tool: delete a linked skill file
+            link_paths = [
+                v["link_path"]
+                for v in manifest_data.get("linked_skills", {}).values()
+                if "link_path" in v
+            ]
+            assert link_paths, f"no link_paths in manifest for {detected_name}"
+            Path(link_paths[0]).unlink()
 
         r2 = runner.invoke(cli, ["status"])
         assert "out of sync" in r2.output.lower(), (

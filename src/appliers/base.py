@@ -163,8 +163,10 @@ class BaseApplier(ABC):
         skill_dir = self.SKILL_DIR
 
         # Already correctly symlinked — nothing to do
-        link_target = Path(os.readlink(skill_dir)).resolve()
-        if skill_dir.is_symlink() and link_target == skills_source.resolve():
+        already_linked = skill_dir.is_symlink() and (
+            Path(os.readlink(skill_dir)).resolve() == skills_source.resolve()
+        )
+        if already_linked:
             return True
 
         # Remove whatever is there now
