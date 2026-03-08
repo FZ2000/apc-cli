@@ -18,6 +18,7 @@ from ui import (
     info,
     warning,
 )
+from unsync import unsync
 
 
 @click.group()
@@ -56,6 +57,7 @@ cli.add_command(memory)
 
 # Install
 cli.add_command(install)
+cli.add_command(unsync)
 
 # MCP
 cli.add_command(mcp)

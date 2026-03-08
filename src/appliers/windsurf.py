@@ -97,6 +97,74 @@ class WindsurfApplier(BaseApplier):
     def MEMORY_ALLOWED_BASE(self) -> "Path":  # noqa: N802
         return _windsurf_dir()
 
+    _APC_SKILLS_HEADER = "<!-- apc-skills-start -->"
+    _APC_SKILLS_FOOTER = "<!-- apc-skills-end -->"
+
+    def _skills_section(self) -> str:
+        """Build the APC-managed skills block for global_rules.md."""
+        from skills import get_skills_dir
+
+        skills_dir = get_skills_dir()
+        lines = [
+            self._APC_SKILLS_HEADER,
+            "",
+            "## APC Skills",
+            "",
+            "The following skills are managed by apc. Each provides specialised",
+            "instructions — refer to the skill name when you need that capability.",
+            "",
+        ]
+        if skills_dir.exists():
+            for skill_path in sorted(skills_dir.iterdir()):
+                skill_md = skill_path / "SKILL.md"
+                if skill_md.exists():
+                    lines.append(f"- **{skill_path.name}**: {skill_md}")
+        lines += ["", self._APC_SKILLS_FOOTER]
+        return "\n".join(lines)
+
+    def _write_skills_to_global_rules(self) -> None:
+        """Inject (or update) the APC skills block in global_rules.md."""
+        rules_path = _windsurf_global_rules()
+        rules_path.parent.mkdir(parents=True, exist_ok=True)
+        existing = rules_path.read_text(encoding="utf-8") if rules_path.exists() else ""
+
+        block = self._skills_section()
+
+        if self._APC_SKILLS_HEADER in existing:
+            # Replace existing block
+            start = existing.index(self._APC_SKILLS_HEADER)
+            end = existing.index(self._APC_SKILLS_FOOTER) + len(self._APC_SKILLS_FOOTER)
+            updated = existing[:start] + block + existing[end:]
+        else:
+            # Append block
+            updated = existing.rstrip("\n") + "\n\n" + block + "\n"
+
+        rules_path.write_text(updated, encoding="utf-8")
+
+    def sync_skills_dir(self) -> bool:  # type: ignore[override]
+        """Inject the APC skills section into global_rules.md (no dir symlink)."""
+        self._write_skills_to_global_rules()
+        return True
+
+    def apply_installed_skill(self, name: str) -> bool:  # type: ignore[override]
+        """Regenerate the APC skills block when a new skill is installed."""
+        self._write_skills_to_global_rules()
+        return True
+
+    def unsync_skills(self) -> bool:  # type: ignore[override]
+        """Remove the APC skills section from global_rules.md."""
+        rules_path = _windsurf_global_rules()
+        if not rules_path.exists():
+            return False
+        content = rules_path.read_text(encoding="utf-8")
+        if self._APC_SKILLS_HEADER not in content:
+            return False
+        start = content.index(self._APC_SKILLS_HEADER)
+        end = content.index(self._APC_SKILLS_FOOTER) + len(self._APC_SKILLS_FOOTER)
+        updated = (content[:start] + content[end:]).strip("\n") + "\n"
+        rules_path.write_text(updated, encoding="utf-8")
+        return True
+
     def apply_skills(self, skills: List[Dict], manifest: ToolManifest) -> int:
         return 0
 

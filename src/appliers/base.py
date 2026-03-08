@@ -175,6 +175,31 @@ class BaseApplier(ABC):
         os.symlink(skills_source, skill_dir)
         return True
 
+    def apply_installed_skill(self, name: str) -> bool:
+        """Propagate a newly installed skill to this tool (called by apc install).
+
+        Dir-symlink tools: no-op — the symlink already makes the skill live.
+        Override in tools that need per-skill injection (Windsurf, Copilot).
+        Returns True if an action was taken, False if no-op.
+        """
+        return False  # dir-symlink tools need no action
+
+    def unsync_skills(self) -> bool:
+        """Undo the skill sync for this tool.
+
+        Dir-symlink tools: remove the symlink, recreate an empty dir.
+        Override in tools that use injection or per-file symlinks.
+        Returns True if anything was undone.
+        """
+        skill_dir = self.SKILL_DIR
+        if skill_dir is None:
+            return False
+        if skill_dir.is_symlink():
+            skill_dir.unlink()
+            skill_dir.mkdir(parents=True, exist_ok=True)
+            return True
+        return False
+
     @abstractmethod
     def apply_mcp_servers(
         self,

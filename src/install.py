@@ -83,27 +83,30 @@ def _resolve_targets(target_args: tuple, yes: bool) -> List[str]:
     return targets
 
 
-def _note_per_skill_tools(target_list: list) -> None:
-    """Warn if any synced target uses per-skill symlinks (not dir-level).
+def _propagate_to_synced_tools(skill_name: str, explicit_targets: list) -> None:
+    """Push a newly installed skill to all tools that have been synced.
 
-    For tools with SKILL_DIR set, the dir symlink is already live after
-    apc sync — new skills in ~/.apc/skills/ appear immediately.
-    For Copilot (no SKILL_DIR), re-run `apc sync` to pick up new skills.
+    - Dir-symlink tools: no-op (symlink already makes the skill live).
+    - Windsurf: regenerates global_rules.md skills section.
+    - Copilot: creates ~/.github/instructions/<name>.instructions.md symlink.
+
+    Only runs for tools that are already synced (have a manifest with last_sync_at).
+    Skips tools that were explicitly targeted by this install (already handled).
     """
-    needs_sync = []
-    for target_name in target_list:
+    from appliers.manifest import ToolManifest
+    from extractors import detect_installed_tools
+
+    for tool_name in detect_installed_tools():
+        if tool_name in explicit_targets:
+            continue
+        manifest = ToolManifest(tool_name)
+        if manifest.is_first_sync:
+            continue  # not yet synced — skip
         try:
-            applier = get_applier(target_name)
-            if applier.SKILL_DIR is None:
-                needs_sync.append(target_name)
+            applier = get_applier(tool_name)
+            applier.apply_installed_skill(skill_name)
         except Exception:
             pass
-    if needs_sync:
-        click.echo(
-            f"  ℹ {', '.join(needs_sync)}: run `apc sync` to link this skill "
-            "(per-skill symlinks — dir-level not supported for mixed skill dirs)",
-            err=True,
-        )
 
 
 @click.command()
@@ -239,7 +242,7 @@ def install(repo, skills, install_all, targets, branch, list_only, yes):
         save_skill_file(skill["name"], raw_content)
 
         # Apply directly to each target target
-        _note_per_skill_tools(target_list)
+        _propagate_to_synced_tools(skill["name"], target_list)
 
         # Save metadata to local cache
         existing = load_skills()

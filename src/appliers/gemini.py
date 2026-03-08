@@ -65,6 +65,10 @@ def _gemini_dir() -> Path:
     return Path.home() / ".gemini"
 
 
+def _gemini_skills_dir() -> Path:
+    return Path.home() / ".gemini" / "skills"
+
+
 def _gemini_settings() -> Path:
     return Path.home() / ".gemini/settings.json"
 
@@ -75,6 +79,11 @@ def _gemini_md() -> Path:
 
 class GeminiApplier(BaseApplier):
     TOOL_NAME = "gemini-cli"
+
+    @property
+    def SKILL_DIR(self) -> Path:  # type: ignore[override]
+        return _gemini_skills_dir()
+
     MEMORY_SCHEMA = GEMINI_MEMORY_SCHEMA
 
     @property  # type: ignore[override]
