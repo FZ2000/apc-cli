@@ -35,6 +35,10 @@ def _tool_sync_status(name: str) -> str:
     if manifest.is_first_sync:
         return "not synced"
 
+    # If the last sync recorded an error, surface it immediately (#34)
+    if manifest.last_sync_failed:
+        return "error"
+
     # Gather all file paths APC last wrote for this tool
     recorded_paths: list[str] = []
 

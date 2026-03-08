@@ -127,6 +127,8 @@ def tools_status_table(tools: List[Dict[str, str]]) -> None:
             badge = Text("⚠ out of sync", style="bold yellow")
         elif st == "not synced":
             badge = Text("○ not synced", style="yellow")
+        elif st == "error":
+            badge = Text("✗ error", style="bold red")
         else:
             badge = Text("◌ detected", style="dim")
         table.add_row(name, badge)

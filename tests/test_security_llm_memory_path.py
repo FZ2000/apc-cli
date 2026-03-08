@@ -80,8 +80,8 @@ class TestMemoryAllowedBaseGuard(unittest.TestCase):
             result = applier.apply_memory_via_llm(
                 [{"id": "x", "source_tool": "t", "content": "hello"}], manifest
             )
-        # Returns 0 due to LLM exception, not RuntimeError
-        self.assertEqual(result, 0)
+        # Returns -1 due to LLM exception (signals failure), not RuntimeError
+        self.assertEqual(result, -1)
 
 
 class TestExpandUserInLLMWritePath(unittest.TestCase):

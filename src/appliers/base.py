@@ -216,7 +216,7 @@ class BaseApplier(ABC):
                 )
             else:
                 warning(f"LLM call failed ({e}), skipping memory sync for {self.TOOL_NAME}")
-            return 0
+            return -1  # Signal LLM failure — callers must not show ✓ (#31)
 
         # Parse structured output
         try:

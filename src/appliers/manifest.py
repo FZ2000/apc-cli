@@ -55,6 +55,7 @@ class ToolManifest:
             "schema_version": SCHEMA_VERSION,
             "tool": self.tool,
             "last_sync_at": None,
+            "last_sync_result": None,
             "skills": {},
             "linked_skills": {},
             "mcp_servers": {},
@@ -66,8 +67,28 @@ class ToolManifest:
         """True when no manifest existed on disk before this run."""
         return self._data.get("last_sync_at") is None
 
+    @property
+    def last_sync_failed(self) -> bool:
+        """True when the last recorded sync ended with an error."""
+        return self._data.get("last_sync_result") == "error"
+
     def save(self) -> None:
         self._data["last_sync_at"] = _now_iso()
+        if "last_sync_result" not in self._data or self._data.get("last_sync_result") != "error":
+            self._data["last_sync_result"] = "success"
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.path.write_text(json.dumps(self._data, indent=2), encoding="utf-8")
+
+    def save_failure(self, error_msg: str = "") -> None:
+        """Persist the manifest with a failure status.
+
+        Called when the sync raised an exception so that ``apc status`` can
+        report the error rather than showing the previous (stale) success.
+        """
+        self._data["last_sync_at"] = _now_iso()
+        self._data["last_sync_result"] = "error"
+        if error_msg:
+            self._data["last_sync_error"] = error_msg
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.write_text(json.dumps(self._data, indent=2), encoding="utf-8")
 
