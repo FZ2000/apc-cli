@@ -126,7 +126,6 @@ apc --version
 | `--all` | Apply to all detected tools without prompting |
 | `--no-memory` | Skip memory entries |
 | `--override-mcp` | Replace existing MCP servers instead of merging |
-| `--all-sources-mcp` | Broadcast all MCP servers to every tool (ignores source_tool) |
 | `--dry-run` | Show files that would be written without writing |
 | `--yes`, `-y` | Skip confirmation prompts |
 
