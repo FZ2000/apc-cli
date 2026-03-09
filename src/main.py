@@ -19,9 +19,16 @@ from ui import (
     warning,
 )
 
+try:
+    from importlib.metadata import version as _pkg_version
+
+    _apc_version = _pkg_version("apc-cli")
+except Exception:
+    _apc_version = "0.1.1"
+
 
 @click.group()
-@click.version_option(version="0.1.1", prog_name="apc")
+@click.version_option(version=_apc_version, prog_name="apc")
 def cli():
     """apc — AI Personal Context manager.
 
