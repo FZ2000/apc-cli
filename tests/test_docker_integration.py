@@ -1449,3 +1449,99 @@ class TestExportImportRoundTrip:
 
         r = runner.invoke(cli, ["status"])
         assert r.exit_code == 0
+
+
+# ---------------------------------------------------------------------------
+# Phase 12: --dry-run for collect (#25) and sync (#24)
+# ---------------------------------------------------------------------------
+
+
+class TestCollectDryRun:
+    """End-to-end: collect --dry-run previews without writing cache."""
+
+    def test_collect_dry_run_no_files_written(self, runner, cli, tmp_path, monkeypatch):
+        """collect --dry-run must not create any cache files."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        (tmp_path / ".cursor").mkdir()
+        (tmp_path / ".cursor" / "mcp.json").write_text("{}")
+
+        result = runner.invoke(cli, ["collect", "--dry-run", "--yes"])
+        assert result.exit_code == 0, result.output
+
+        cache_dir = tmp_path / ".apc" / "cache"
+        for fname in ("skills.json", "mcp.json", "memory.json"):
+            assert not (cache_dir / fname).exists(), f"{fname} written despite --dry-run"
+
+    def test_collect_dry_run_prints_preview(self, runner, cli, tmp_path, monkeypatch):
+        """collect --dry-run output shows 'Would write to cache' preview."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        (tmp_path / ".cursor").mkdir()
+        (tmp_path / ".cursor" / "mcp.json").write_text(
+            json.dumps({"mcpServers": {"test": {"command": "npx", "args": []}}})
+        )
+
+        result = runner.invoke(cli, ["collect", "--dry-run", "--yes"])
+        assert result.exit_code == 0, result.output
+        # Output says "Would write to cache:" or "No files written."
+        out = result.output.lower()
+        assert "write to cache" in out or "no files written" in out
+
+    def test_collect_without_dry_run_writes_cache(self, runner, cli, tmp_path, monkeypatch):
+        """Control: without --dry-run the cache IS written."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        (tmp_path / ".cursor").mkdir()
+        (tmp_path / ".cursor" / "mcp.json").write_text(
+            json.dumps({"mcpServers": {"test-mcp": {"command": "npx", "args": []}}})
+        )
+
+        result = runner.invoke(cli, ["collect", "--yes"])
+        assert result.exit_code == 0, result.output
+
+        # At least one cache file must have been written
+        cache_dir = tmp_path / ".apc" / "cache"
+        cache_files = ("skills.json", "mcp.json", "memory.json")
+        written = [f for f in cache_files if (cache_dir / f).exists()]
+        assert written, f"No cache files written without --dry-run. Output:\n{result.output}"
+
+
+class TestSyncDryRunIntegration:
+    """End-to-end: sync --dry-run previews without modifying tool files."""
+
+    def test_sync_dry_run_no_files_written(self, runner, cli, tmp_path, monkeypatch):
+        """sync --dry-run must not modify any tool config files."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        (tmp_path / ".cursor").mkdir()
+        mcp_path = tmp_path / ".cursor" / "mcp.json"
+        mcp_path.write_text(json.dumps({"mcpServers": {"test": {"command": "npx", "args": []}}}))
+
+        runner.invoke(cli, ["collect", "--yes"])
+
+        mtime_before = mcp_path.stat().st_mtime
+        result = runner.invoke(cli, ["sync", "--tools", "cursor", "--dry-run"])
+        assert result.exit_code == 0, result.output
+        assert mcp_path.stat().st_mtime == mtime_before, "sync --dry-run modified mcp.json"
+
+    def test_sync_dry_run_output_mentions_tool(self, runner, cli, tmp_path, monkeypatch):
+        """sync --dry-run output references the target tool."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        (tmp_path / ".cursor").mkdir()
+        (tmp_path / ".cursor" / "mcp.json").write_text(
+            json.dumps({"mcpServers": {"test": {"command": "npx", "args": []}}})
+        )
+
+        runner.invoke(cli, ["collect", "--yes"])
+        result = runner.invoke(cli, ["sync", "--tools", "cursor", "--dry-run"])
+        assert result.exit_code == 0, result.output
+        assert "cursor" in result.output or "dry-run" in result.output.lower()
+
+    def test_sync_dry_run_shows_no_files_written(self, runner, cli, tmp_path, monkeypatch):
+        """sync --dry-run explicitly states no files written."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        (tmp_path / ".cursor").mkdir()
+        (tmp_path / ".cursor" / "mcp.json").write_text(
+            json.dumps({"mcpServers": {"test": {"command": "npx", "args": []}}})
+        )
+
+        runner.invoke(cli, ["collect", "--yes"])
+        result = runner.invoke(cli, ["sync", "--tools", "cursor", "--dry-run"])
+        assert "No files written" in result.output or "dry-run" in result.output.lower()
