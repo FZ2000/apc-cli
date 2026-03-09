@@ -3,6 +3,7 @@
 No login required. No network calls.
 """
 
+import os
 from pathlib import Path
 
 import click
@@ -45,6 +46,14 @@ def _tool_sync_status(name: str) -> str:
     for info_dict in manifest._data.get("linked_skills", {}).values():
         if fp := info_dict.get("link_path"):
             recorded_paths.append(fp)
+
+    # Dir-level symlink check: verify the skills dir still points to ~/.apc/skills/
+    if dir_sync := manifest._data.get("dir_sync"):
+        skill_dir = Path(dir_sync.get("skill_dir", ""))
+        target = Path(dir_sync.get("target", ""))
+        # Symlink must exist and still resolve to the canonical source
+        if not skill_dir.is_symlink() or Path(os.readlink(skill_dir)).resolve() != target.resolve():
+            return "out of sync"
 
     # memory is a flat dict {file_path, checksum, ...}, not a dict-of-dicts.
     if fp := manifest._data.get("memory", {}).get("file_path"):

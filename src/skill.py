@@ -5,9 +5,11 @@ No login required. No network calls.
 
 import click
 
-from cache import load_skills
+from cache import load_skills, save_skills
+from install import propagate_remove_to_synced_tools
+from skills import delete_skill_file, get_skills_dir
 from sync_helpers import resolve_target_tools, sync_skills
-from ui import dim, header, paged_print, skill_detail, skills_list
+from ui import dim, error, header, paged_print, skill_detail, skills_list, success, warning
 
 
 @click.group()
@@ -63,3 +65,55 @@ def skill_sync(tools, apply_all, yes):
             return
 
     sync_skills(tool_list)
+
+
+@skill.command("remove")
+@click.argument("names", nargs=-1, required=True, metavar="NAME [NAME...]")
+@click.option("--yes", "-y", is_flag=True, help="Skip confirmation prompt.")
+def remove(names: tuple, yes: bool) -> None:
+    """Remove one or more installed skills.
+
+    Deletes the skill from ~/.apc/skills/ and cleans up any tool-specific
+    state left behind:
+
+    \b
+    - Dir-symlink tools (Claude Code, OpenClaw, Gemini, Cursor): automatic —
+      the skill dir disappears from the symlink immediately.
+    - Windsurf: regenerates global_rules.md to drop the removed skill.
+    - Copilot: removes the now-dangling .instructions.md symlink.
+
+    \b
+    Examples:
+      apc skill remove pdf
+      apc skill remove pdf skill-creator -y
+    """
+    skills_dir = get_skills_dir()
+    existing = [n for n in names if (skills_dir / n).exists()]
+    missing = [n for n in names if n not in existing]
+
+    if missing:
+        for m in missing:
+            warning(f"Skill '{m}' not found in ~/.apc/skills/ — skipping.")
+
+    if not existing:
+        dim("Nothing to remove.")
+        return
+
+    if not yes:
+        click.echo(f"\nRemove skill(s): {', '.join(existing)}")
+        if not click.confirm("Proceed?"):
+            click.echo("Cancelled.")
+            return
+
+    removed = []
+    for name in existing:
+        if delete_skill_file(name):
+            # Update the metadata cache
+            cached = [s for s in load_skills() if s.get("name") != name]
+            save_skills(cached)
+            # Notify synced tools
+            propagate_remove_to_synced_tools(name)
+            success(f"Removed: {name}")
+            removed.append(name)
+        else:
+            error(f"Failed to remove: {name}")

@@ -18,6 +18,7 @@ from ui import (
     info,
     warning,
 )
+from unsync import unsync
 
 try:
     from importlib.metadata import version as _pkg_version
@@ -63,6 +64,7 @@ cli.add_command(memory)
 
 # Install
 cli.add_command(install)
+cli.add_command(unsync)
 
 # MCP
 cli.add_command(mcp)

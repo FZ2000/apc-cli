@@ -17,6 +17,8 @@ def _mock_applier(tmpdir: Path, tool: str = "cursor"):
     """Return a MagicMock that satisfies the applier interface."""
     applier = MagicMock()
     applier.get_manifest.return_value = _make_manifest(tmpdir, tool)
+    applier.SKILL_DIR = tmpdir / "skills"
+    applier.sync_skills_dir.return_value = True  # dir-level symlink succeeds
     applier.apply_skills.return_value = 3
     applier.link_skills.return_value = 1
     applier.apply_mcp_servers.return_value = 2
@@ -96,7 +98,11 @@ class TestSyncAll(unittest.TestCase):
         self.assertTrue(result)
 
     def test_happy_path_calls_all_three_phases(self):
-        """Each tool's applier should have apply_skills, apply_mcp_servers called."""
+        """Each tool's applier should have link_skills, apply_mcp_servers called.
+
+        apply_skills() is no longer called by sync — skills go through
+        link_skills() (per-skill) or sync_skills_dir() (dir-level).
+        """
         appliers = {}
 
         def factory(tmpdir, name):
@@ -106,7 +112,9 @@ class TestSyncAll(unittest.TestCase):
 
         self._run_sync_all(["cursor"], factory)
 
-        appliers["cursor"].apply_skills.assert_called_once()
+        appliers["cursor"].sync_skills_dir.assert_called_once()
+        appliers["cursor"].link_skills.assert_not_called()
+        appliers["cursor"].apply_skills.assert_not_called()
         appliers["cursor"].apply_mcp_servers.assert_called_once()
         appliers["cursor"].apply_memory_via_llm.assert_called_once()
         appliers["cursor"].prune.assert_called_once()
@@ -158,25 +166,24 @@ class TestSyncSkillsPerToolCounter(unittest.TestCase):
     """sync_skills: success message must show per-tool counts, not cumulative."""
 
     def test_per_tool_count_not_cumulative(self):
-        """With 2 tools × 3 skills, the success message for tool-2
-        must say '3 copied' not '6 copied'."""
+        """With 2 per-skill tools × 3 skills each, each success message
+        should say '3 skill(s) linked', not '6 skill(s) linked'."""
         tmpdir = Path(tempfile.mkdtemp())
-        skills = [{"name": f"s{i}", "body": ""} for i in range(3)]
+        installed = [{"name": f"s{i}", "body": ""} for i in range(3)]
         success_messages = []
 
         def factory(tmpdir_inner, name):
             a = _mock_applier(tmpdir_inner, name)
-            a.apply_skills.return_value = 3
-            a.link_skills.return_value = 0
+            a.sync_skills_dir.return_value = True  # dir-level sync
             return a
 
         with (
             patch("sync_helpers.get_applier", side_effect=lambda n: factory(tmpdir, n)),
             patch(
                 "sync_helpers.load_local_bundle",
-                return_value={"skills": skills, "mcp_servers": [], "memory": []},
+                return_value={"mcp_servers": [], "memory": []},
             ),
-            patch("sync_helpers._discover_installed_skills", return_value=[]),
+            patch("sync_helpers._discover_installed_skills", return_value=installed),
             patch("sync_helpers.get_skills_dir", return_value=tmpdir / "skills"),
             patch("sync_helpers.success", side_effect=lambda msg: success_messages.append(msg)),
         ):
@@ -184,10 +191,9 @@ class TestSyncSkillsPerToolCounter(unittest.TestCase):
 
             sync_skills(["cursor", "claude-code"])
 
-        # Each message should say 3 copied, not 3 then 6
+        # Each message should say symlinked, not cumulative counts
         for msg in success_messages:
-            self.assertIn("3 copied", msg, f"Expected '3 copied' in: {msg}")
-            self.assertNotIn("6 copied", msg, f"Unexpected cumulative count in: {msg}")
+            self.assertIn("symlinked", msg, f"Expected 'symlinked' in: {msg}")
 
 
 if __name__ == "__main__":

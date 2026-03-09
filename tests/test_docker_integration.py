@@ -406,29 +406,27 @@ class TestStatus:
         mcp_key,
         supports_skills,
     ):
-        """Deleting a synced skill file causes 'out of sync' for that tool."""
+        """Removing a synced skill link/file causes 'out of sync' for that tool.
+
+        Skills now live in ~/.apc/skills/ (source of truth).
+        - Tools with SKILL_DIR set (claude-code, openclaw, cursor): their skills dir is a
+          single symlink → ~/.apc/skills/. Out-of-sync = symlink removed/broken.
+        - Per-skill tools (cursor): individual link_path entries in the manifest.
+          Out-of-sync = linked file deleted.
+        """
         monkeypatch.setenv("HOME", str(tmp_path))
         monkeypatch.chdir(tmp_path)
         for d in seed_dirs:
             (tmp_path / d).mkdir(parents=True, exist_ok=True)
 
-        # Seed isolated cache then sync — appliers are lazy so all writes go to tmp_path
+        # Seed ~/.apc/skills/test-skill/SKILL.md — the canonical source
+        skills_source = tmp_path / ".apc" / "skills" / "test-skill"
+        skills_source.mkdir(parents=True, exist_ok=True)
+        (skills_source / "SKILL.md").write_text("# Test\nTest skill body.", encoding="utf-8")
+
         cache_dir = tmp_path / ".apc" / "cache"
         cache_dir.mkdir(parents=True, exist_ok=True)
-        (cache_dir / "skills.json").write_text(
-            json.dumps(
-                [
-                    {
-                        "name": "test-skill",
-                        "description": "A test skill",
-                        "body": "Test skill body.",
-                        "tags": ["test"],
-                        "version": "1.0.0",
-                    }
-                ]
-            ),
-            encoding="utf-8",
-        )
+        (cache_dir / "skills.json").write_text("[]", encoding="utf-8")
         (cache_dir / "mcp_servers.json").write_text("[]", encoding="utf-8")
         (cache_dir / "memory.json").write_text("[]", encoding="utf-8")
         runner.invoke(cli, ["sync", "--tools", detected_name, "--yes", "--no-memory"])
@@ -439,14 +437,23 @@ class TestStatus:
             f"{detected_name}: expected synced before delete, got:\n{r1.output}"
         )
 
-        # Find and delete a skill file recorded by the manifest
+        # Break the skill link/symlink to trigger out-of-sync
         manifest_path = tmp_path / ".apc" / "manifests" / f"{applier_tool_name}.json"
         manifest_data = json.loads(manifest_path.read_text())
-        skill_paths = [
-            v["file_path"] for v in manifest_data.get("skills", {}).values() if "file_path" in v
-        ]
-        assert skill_paths, f"no skill file_paths in manifest for {detected_name}"
-        Path(skill_paths[0]).unlink()
+
+        if manifest_data.get("dir_sync"):
+            # Exclusive-dir tool: remove the dir-level symlink
+            skill_dir = Path(manifest_data["dir_sync"]["skill_dir"])
+            skill_dir.unlink()
+        else:
+            # Per-skill tool: delete a linked skill file
+            link_paths = [
+                v["link_path"]
+                for v in manifest_data.get("linked_skills", {}).values()
+                if "link_path" in v
+            ]
+            assert link_paths, f"no link_paths in manifest for {detected_name}"
+            Path(link_paths[0]).unlink()
 
         r2 = runner.invoke(cli, ["status"])
         assert "out of sync" in r2.output.lower(), (
@@ -718,8 +725,8 @@ class TestSync:
         assert "mcpServers" in data
         assert len(data["mcpServers"]) > 0
         rules_dir = HOME / ".cursor" / "rules"
-        assert rules_dir.is_dir()
-        assert len(list(rules_dir.glob("*.mdc"))) > 0, "No .mdc skill files written to cursor"
+        # rules_dir is now a symlink → ~/.apc/skills/ (dir-level sync)
+        assert rules_dir.is_symlink() or rules_dir.is_dir(), f"rules dir missing: {rules_dir}"
 
     def test_sync_writes_cursor_mcp(self, runner, cli):
         runner.invoke(cli, ["sync", "--tools", "cursor", "--yes", "--no-memory", "--override-mcp"])
@@ -916,7 +923,7 @@ class TestInstall:
         monkeypatch.setenv("HOME", str(tmp_path))
         result = runner.invoke(
             cli,
-            ["install", self.TEST_REPO, "--skill", self.KNOWN_SKILL, "-t", "cursor", "-y"],
+            ["install", self.TEST_REPO, "--skill", self.KNOWN_SKILL, "-y"],
         )
         assert result.exit_code == 0, result.output
         assert "✓" in result.output
@@ -936,8 +943,6 @@ class TestInstall:
                 "pdf",
                 "--skill",
                 "skill-creator",
-                "-t",
-                "cursor",
                 "-y",
             ],
         )
@@ -956,8 +961,6 @@ class TestInstall:
                 self.TEST_REPO,
                 "--skill",
                 "totally-nonexistent-xyz",
-                "-t",
-                "cursor",
                 "-y",
             ],
         )
@@ -970,7 +973,7 @@ class TestInstall:
     def test_install_all(self, runner, cli, tmp_path, monkeypatch):
         """--all installs every skill from the repo."""
         monkeypatch.setenv("HOME", str(tmp_path))
-        result = runner.invoke(cli, ["install", self.TEST_REPO, "--all", "-t", "cursor", "-y"])
+        result = runner.invoke(cli, ["install", self.TEST_REPO, "--all", "-y"])
         assert result.exit_code == 0, result.output
         assert "✓" in result.output
         skills_dir = tmp_path / ".apc" / "skills"
@@ -982,7 +985,7 @@ class TestInstall:
         monkeypatch.setenv("HOME", str(tmp_path))
         result = runner.invoke(
             cli,
-            ["install", self.TEST_REPO, "--skill", self.KNOWN_SKILL, "-t", "cursor", "-y"],
+            ["install", self.TEST_REPO, "--skill", self.KNOWN_SKILL, "-y"],
         )
         assert result.exit_code == 0
         assert "Proceed?" not in result.output
@@ -990,18 +993,17 @@ class TestInstall:
         assert skill_md.exists(), "SKILL.md not written even with -y"
         assert len(skill_md.read_text()) > 0
 
-    def test_install_target_all_agents(self, runner, cli, tmp_path, monkeypatch):
-        """--target '*' installs to all detected tools."""
+    def test_install_saves_to_apc_skills(self, runner, cli, tmp_path, monkeypatch):
+        """apc install saves skills to ~/.apc/skills/ (no --target needed)."""
         monkeypatch.setenv("HOME", str(tmp_path))
-        (tmp_path / ".cursor").mkdir()
         result = runner.invoke(
             cli,
-            ["install", self.TEST_REPO, "--skill", self.KNOWN_SKILL, "--target", "*", "-y"],
+            ["install", self.TEST_REPO, "--skill", self.KNOWN_SKILL, "-y"],
         )
         assert result.exit_code == 0, result.output
         assert "✓" in result.output
         skill_md = tmp_path / ".apc" / "skills" / self.KNOWN_SKILL / "SKILL.md"
-        assert skill_md.exists(), "SKILL.md not written when targeting all agents"
+        assert skill_md.exists(), "SKILL.md not written to ~/.apc/skills/"
 
 
 # ---------------------------------------------------------------------------
@@ -1025,24 +1027,24 @@ class TestInstallThenSync:
         (tmp_path / ".cursor").mkdir()
         (tmp_path / ".cursor" / "mcp.json").write_text("{}")
 
-        r1 = runner.invoke(
-            cli, ["install", self.TEST_REPO, "--skill", self.KNOWN_SKILL, "-t", "cursor", "-y"]
-        )
+        r1 = runner.invoke(cli, ["install", self.TEST_REPO, "--skill", self.KNOWN_SKILL, "-y"])
         assert r1.exit_code == 0, r1.output
 
         r2 = runner.invoke(cli, ["sync", "--tools", "cursor", "--yes"])
         assert r2.exit_code == 0, r2.output
 
-        cursor_skill = tmp_path / ".cursor" / "rules" / f"{self.KNOWN_SKILL}.mdc"
-        assert cursor_skill.exists(), f"Skill not found at {cursor_skill} after sync"
+        # rules dir is a symlink → ~/.apc/skills/; skill appears as a subdir
+        rules_dir = tmp_path / ".cursor" / "rules"
+        assert rules_dir.is_symlink(), f"rules dir should be a symlink after sync: {rules_dir}"
+        skill_dir = rules_dir / self.KNOWN_SKILL
+        assert skill_dir.is_dir(), f"Skill dir {skill_dir} not found after sync"
+        assert (skill_dir / "SKILL.md").exists(), f"SKILL.md missing in {skill_dir}"
 
     def test_installed_skill_appears_in_skill_list(self, runner, cli, tmp_path, monkeypatch):
         """Installed skill appears in apc skill list immediately after install."""
         monkeypatch.setenv("HOME", str(tmp_path))
 
-        runner.invoke(
-            cli, ["install", self.TEST_REPO, "--skill", self.KNOWN_SKILL, "-t", "cursor", "-y"]
-        )
+        runner.invoke(cli, ["install", self.TEST_REPO, "--skill", self.KNOWN_SKILL, "-y"])
 
         result = runner.invoke(cli, ["skill", "list"])
         assert result.exit_code == 0
@@ -1067,8 +1069,6 @@ class TestInstallThenSync:
                 skills[0],
                 "--skill",
                 skills[1],
-                "-t",
-                "cursor",
                 "-y",
             ],
         )
@@ -1078,10 +1078,12 @@ class TestInstallThenSync:
         r_sync = runner.invoke(cli, ["sync", "--tools", "cursor", "--yes"])
         assert r_sync.exit_code == 0, r_sync.output
 
+        # rules dir is a symlink → ~/.apc/skills/; each skill is a subdir with SKILL.md
         rules_dir = tmp_path / ".cursor" / "rules"
+        assert rules_dir.is_symlink(), f"rules dir should be a symlink after sync: {rules_dir}"
         for name in skills:
-            assert (rules_dir / f"{name}.mdc").exists(), (
-                f"Skill {name} missing from cursor after sync"
+            assert (rules_dir / name / "SKILL.md").exists(), (
+                f"Skill {name}/SKILL.md missing from cursor after sync"
             )
 
     def test_install_all_then_sync_dry_run(self, runner, cli, tmp_path, monkeypatch):
@@ -1090,7 +1092,7 @@ class TestInstallThenSync:
         (tmp_path / ".cursor").mkdir()
         (tmp_path / ".cursor" / "mcp.json").write_text("{}")
 
-        r_install = runner.invoke(cli, ["install", self.TEST_REPO, "--all", "-t", "cursor", "-y"])
+        r_install = runner.invoke(cli, ["install", self.TEST_REPO, "--all", "-y"])
         assert r_install.exit_code == 0, r_install.output
 
         skills_dir = tmp_path / ".apc" / "skills"
@@ -1110,9 +1112,7 @@ class TestInstallThenSync:
         (tmp_path / ".cursor").mkdir()
         (tmp_path / ".cursor" / "mcp.json").write_text("{}")
 
-        runner.invoke(
-            cli, ["install", self.TEST_REPO, "--skill", self.KNOWN_SKILL, "-t", "cursor", "-y"]
-        )
+        runner.invoke(cli, ["install", self.TEST_REPO, "--skill", self.KNOWN_SKILL, "-y"])
         runner.invoke(cli, ["sync", "--tools", "cursor", "--yes"])
 
         r_status = runner.invoke(cli, ["status"])
@@ -1545,3 +1545,391 @@ class TestSyncDryRunIntegration:
         runner.invoke(cli, ["collect", "--yes"])
         result = runner.invoke(cli, ["sync", "--tools", "cursor", "--dry-run"])
         assert "No files written" in result.output or "dry-run" in result.output.lower()
+
+
+# Phase 13: Windsurf injection sync (non-symlink)
+# ---------------------------------------------------------------------------
+
+
+class TestWindsurfInjectionSync:
+    """End-to-end tests for Windsurf global_rules.md injection.
+
+    Windsurf has no dedicated skills dir; apc maintains an APC Skills block
+    inside ~/.codeium/windsurf/memories/global_rules.md.
+    """
+
+    TEST_REPO = "anthropics/skills"
+    SKILL_A = "pdf"
+    SKILL_B = "skill-creator"
+
+    def _setup_windsurf(self, tmp_path: Path) -> Path:
+        """Create the Windsurf memories dir so the tool is detectable."""
+        ws_dir = tmp_path / ".codeium" / "windsurf" / "memories"
+        ws_dir.mkdir(parents=True, exist_ok=True)
+        return ws_dir
+
+    def _global_rules(self, tmp_path: Path) -> Path:
+        return tmp_path / ".codeium" / "windsurf" / "memories" / "global_rules.md"
+
+    def test_sync_windsurf_creates_injection_block(self, runner, cli, tmp_path, monkeypatch):
+        """apc sync writes the APC Skills block into global_rules.md."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        self._setup_windsurf(tmp_path)
+
+        runner.invoke(cli, ["install", self.TEST_REPO, "--skill", self.SKILL_A, "-y"])
+        r = runner.invoke(cli, ["sync", "--tools", "windsurf", "--yes"])
+        assert r.exit_code == 0, r.output
+
+        rules = self._global_rules(tmp_path)
+        assert rules.exists(), "global_rules.md was not created by apc sync"
+        content = rules.read_text()
+        assert "<!-- apc-skills-start -->" in content
+        assert "<!-- apc-skills-end -->" in content
+        assert "## APC Skills" in content
+        assert self.SKILL_A in content
+
+    def test_sync_windsurf_not_a_symlink(self, runner, cli, tmp_path, monkeypatch):
+        """global_rules.md must be a real file, not a symlink."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        self._setup_windsurf(tmp_path)
+
+        runner.invoke(cli, ["install", self.TEST_REPO, "--skill", self.SKILL_A, "-y"])
+        runner.invoke(cli, ["sync", "--tools", "windsurf", "--yes"])
+
+        rules = self._global_rules(tmp_path)
+        assert not rules.is_symlink(), "global_rules.md must not be a symlink"
+
+    def test_sync_windsurf_preserves_existing_rules(self, runner, cli, tmp_path, monkeypatch):
+        """apc sync appends the APC block without erasing existing global rules."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        ws_dir = self._setup_windsurf(tmp_path)
+        rules = ws_dir / "global_rules.md"
+        rules.write_text("# My Rules\n\nAlways use type hints.\n", encoding="utf-8")
+
+        runner.invoke(cli, ["install", self.TEST_REPO, "--skill", self.SKILL_A, "-y"])
+        runner.invoke(cli, ["sync", "--tools", "windsurf", "--yes"])
+
+        content = rules.read_text()
+        assert "# My Rules" in content
+        assert "Always use type hints." in content
+        assert "<!-- apc-skills-start -->" in content
+
+    def test_install_propagates_to_synced_windsurf(self, runner, cli, tmp_path, monkeypatch):
+        """After apc sync windsurf, a subsequent apc install updates global_rules.md."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        self._setup_windsurf(tmp_path)
+
+        # Sync with one skill
+        runner.invoke(cli, ["install", self.TEST_REPO, "--skill", self.SKILL_A, "-y"])
+        runner.invoke(cli, ["sync", "--tools", "windsurf", "--yes"])
+
+        # Install a second skill — should auto-propagate to Windsurf
+        r = runner.invoke(cli, ["install", self.TEST_REPO, "--skill", self.SKILL_B, "-y"])
+        assert r.exit_code == 0, r.output
+
+        content = self._global_rules(tmp_path).read_text()
+        assert self.SKILL_A in content
+        assert self.SKILL_B in content
+
+    def test_sync_windsurf_replaces_stale_block_on_resync(self, runner, cli, tmp_path, monkeypatch):
+        """Running apc sync again replaces the old block with a fresh one (no duplicates)."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        self._setup_windsurf(tmp_path)
+
+        runner.invoke(cli, ["install", self.TEST_REPO, "--skill", self.SKILL_A, "-y"])
+        runner.invoke(cli, ["sync", "--tools", "windsurf", "--yes"])
+        # Install second skill and re-sync
+        runner.invoke(cli, ["install", self.TEST_REPO, "--skill", self.SKILL_B, "-y"])
+        runner.invoke(cli, ["sync", "--tools", "windsurf", "--yes"])
+
+        content = self._global_rules(tmp_path).read_text()
+        assert content.count("<!-- apc-skills-start -->") == 1, "Duplicate APC blocks found"
+        assert self.SKILL_A in content
+        assert self.SKILL_B in content
+
+    def test_unsync_windsurf_removes_block(self, runner, cli, tmp_path, monkeypatch):
+        """apc unsync windsurf removes the APC Skills block from global_rules.md."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        self._setup_windsurf(tmp_path)
+
+        runner.invoke(cli, ["install", self.TEST_REPO, "--skill", self.SKILL_A, "-y"])
+        runner.invoke(cli, ["sync", "--tools", "windsurf", "--yes"])
+
+        r = runner.invoke(cli, ["unsync", "windsurf", "--yes"])
+        assert r.exit_code == 0, r.output
+
+        content = self._global_rules(tmp_path).read_text()
+        assert "<!-- apc-skills-start -->" not in content
+        assert "## APC Skills" not in content
+
+    def test_unsync_windsurf_preserves_other_rules(self, runner, cli, tmp_path, monkeypatch):
+        """apc unsync windsurf keeps existing rule content outside the APC block."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        ws_dir = self._setup_windsurf(tmp_path)
+        rules = ws_dir / "global_rules.md"
+        rules.write_text("# My Rules\n\nAlways use type hints.\n", encoding="utf-8")
+
+        runner.invoke(cli, ["install", self.TEST_REPO, "--skill", self.SKILL_A, "-y"])
+        runner.invoke(cli, ["sync", "--tools", "windsurf", "--yes"])
+        runner.invoke(cli, ["unsync", "windsurf", "--yes"])
+
+        content = rules.read_text()
+        assert "# My Rules" in content
+        assert "Always use type hints." in content
+
+    def test_status_shows_windsurf_synced(self, runner, cli, tmp_path, monkeypatch):
+        """apc status reflects windsurf as synced after sync."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        self._setup_windsurf(tmp_path)
+
+        runner.invoke(cli, ["install", self.TEST_REPO, "--skill", self.SKILL_A, "-y"])
+        runner.invoke(cli, ["sync", "--tools", "windsurf", "--yes"])
+
+        r = runner.invoke(cli, ["status"])
+        assert r.exit_code == 0
+
+
+# ---------------------------------------------------------------------------
+# Phase 14: Copilot per-file symlink sync (non-dir-symlink)
+# ---------------------------------------------------------------------------
+
+
+class TestCopilotPerFileSync:
+    """End-to-end tests for Copilot per-file .instructions.md symlinks.
+
+    Copilot reads instructions from ~/.github/instructions/<name>.instructions.md.
+    apc creates per-skill symlinks pointing into ~/.apc/skills/<name>/SKILL.md.
+    """
+
+    TEST_REPO = "anthropics/skills"
+    SKILL_A = "pdf"
+    SKILL_B = "skill-creator"
+
+    def _setup_copilot(self, tmp_path: Path) -> None:
+        """Create a minimal Copilot detection marker."""
+        (tmp_path / ".copilot").mkdir(parents=True, exist_ok=True)
+
+    def _instr_dir(self, tmp_path: Path) -> Path:
+        return tmp_path / ".github" / "instructions"
+
+    def test_sync_copilot_creates_instructions_symlinks(self, runner, cli, tmp_path, monkeypatch):
+        """apc sync creates <skill>.instructions.md symlinks in ~/.github/instructions/."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        self._setup_copilot(tmp_path)
+
+        runner.invoke(cli, ["install", self.TEST_REPO, "--skill", self.SKILL_A, "-y"])
+        r = runner.invoke(cli, ["sync", "--tools", "github-copilot", "--yes"])
+        assert r.exit_code == 0, r.output
+
+        instr_dir = self._instr_dir(tmp_path)
+        link = instr_dir / f"{self.SKILL_A}.instructions.md"
+        assert link.exists(), f"{link} not created by apc sync"
+        assert link.is_symlink(), f"{link} should be a symlink"
+
+    def test_sync_copilot_symlink_points_to_skill_md(self, runner, cli, tmp_path, monkeypatch):
+        """Symlink target resolves to ~/.apc/skills/<name>/SKILL.md."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        self._setup_copilot(tmp_path)
+
+        runner.invoke(cli, ["install", self.TEST_REPO, "--skill", self.SKILL_A, "-y"])
+        runner.invoke(cli, ["sync", "--tools", "github-copilot", "--yes"])
+
+        link = self._instr_dir(tmp_path) / f"{self.SKILL_A}.instructions.md"
+        target = link.resolve()
+        expected = (tmp_path / ".apc" / "skills" / self.SKILL_A / "SKILL.md").resolve()
+        assert target == expected, f"Symlink points to {target}, expected {expected}"
+
+    def test_install_propagates_to_synced_copilot(self, runner, cli, tmp_path, monkeypatch):
+        """After apc sync copilot, a subsequent apc install creates a new symlink."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        self._setup_copilot(tmp_path)
+
+        # Sync with one skill
+        runner.invoke(cli, ["install", self.TEST_REPO, "--skill", self.SKILL_A, "-y"])
+        runner.invoke(cli, ["sync", "--tools", "github-copilot", "--yes"])
+
+        # Install second skill — should auto-create its symlink
+        r = runner.invoke(cli, ["install", self.TEST_REPO, "--skill", self.SKILL_B, "-y"])
+        assert r.exit_code == 0, r.output
+
+        instr_dir = self._instr_dir(tmp_path)
+        assert (instr_dir / f"{self.SKILL_A}.instructions.md").is_symlink()
+        assert (instr_dir / f"{self.SKILL_B}.instructions.md").is_symlink()
+
+    def test_sync_copilot_not_a_dir_symlink(self, runner, cli, tmp_path, monkeypatch):
+        """~/.github/instructions/ must be a real directory, not a dir-level symlink."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        self._setup_copilot(tmp_path)
+
+        runner.invoke(cli, ["install", self.TEST_REPO, "--skill", self.SKILL_A, "-y"])
+        runner.invoke(cli, ["sync", "--tools", "github-copilot", "--yes"])
+
+        instr_dir = self._instr_dir(tmp_path)
+        assert instr_dir.is_dir()
+        assert not instr_dir.is_symlink(), "instructions dir should not be a dir-level symlink"
+
+    def test_unsync_copilot_removes_symlinks(self, runner, cli, tmp_path, monkeypatch):
+        """apc unsync github-copilot removes all .instructions.md symlinks."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        self._setup_copilot(tmp_path)
+
+        runner.invoke(cli, ["install", self.TEST_REPO, "--skill", self.SKILL_A, "-y"])
+        runner.invoke(cli, ["install", self.TEST_REPO, "--skill", self.SKILL_B, "-y"])
+        runner.invoke(cli, ["sync", "--tools", "github-copilot", "--yes"])
+
+        r = runner.invoke(cli, ["unsync", "github-copilot", "--yes"])
+        assert r.exit_code == 0, r.output
+
+        instr_dir = self._instr_dir(tmp_path)
+        symlinks = list(instr_dir.glob("*.instructions.md"))
+        assert symlinks == [], f"Expected no symlinks after unsync, got: {symlinks}"
+
+    def test_unsync_copilot_keeps_real_instruction_files(self, runner, cli, tmp_path, monkeypatch):
+        """apc unsync does not remove manually created .instructions.md files."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        self._setup_copilot(tmp_path)
+
+        # Create a manual instruction file before syncing
+        instr_dir = self._instr_dir(tmp_path)
+        instr_dir.mkdir(parents=True, exist_ok=True)
+        manual = instr_dir / "manual.instructions.md"
+        manual.write_text("# Manual instructions\n", encoding="utf-8")
+
+        runner.invoke(cli, ["install", self.TEST_REPO, "--skill", self.SKILL_A, "-y"])
+        runner.invoke(cli, ["sync", "--tools", "github-copilot", "--yes"])
+        runner.invoke(cli, ["unsync", "github-copilot", "--yes"])
+
+        assert manual.exists(), "Manually created instruction file was deleted by unsync"
+        assert not manual.is_symlink()
+
+    def test_resync_copilot_refreshes_symlinks(self, runner, cli, tmp_path, monkeypatch):
+        """Running apc sync again after new installs refreshes all symlinks correctly."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        self._setup_copilot(tmp_path)
+
+        runner.invoke(cli, ["install", self.TEST_REPO, "--skill", self.SKILL_A, "-y"])
+        runner.invoke(cli, ["sync", "--tools", "github-copilot", "--yes"])
+
+        runner.invoke(cli, ["install", self.TEST_REPO, "--skill", self.SKILL_B, "-y"])
+        r = runner.invoke(cli, ["sync", "--tools", "github-copilot", "--yes"])
+        assert r.exit_code == 0, r.output
+
+        instr_dir = self._instr_dir(tmp_path)
+        assert (instr_dir / f"{self.SKILL_A}.instructions.md").is_symlink()
+        assert (instr_dir / f"{self.SKILL_B}.instructions.md").is_symlink()
+
+
+# ---------------------------------------------------------------------------
+# Phase 15: apc skill remove — non-symlink tool cleanup
+# ---------------------------------------------------------------------------
+
+
+class TestSkillRemoveNonSymlinkTools:
+    """End-to-end: apc skill remove cleans up Windsurf injection and Copilot symlinks."""
+
+    TEST_REPO = "anthropics/skills"
+    SKILL_A = "pdf"
+    SKILL_B = "skill-creator"
+
+    # -- Windsurf -------------------------------------------------------
+
+    def test_remove_updates_windsurf_injection(self, runner, cli, tmp_path, monkeypatch):
+        """After skill remove, Windsurf global_rules.md no longer lists the skill."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        ws_dir = tmp_path / ".codeium" / "windsurf" / "memories"
+        ws_dir.mkdir(parents=True, exist_ok=True)
+
+        runner.invoke(cli, ["install", self.TEST_REPO, "--skill", self.SKILL_A, "-y"])
+        runner.invoke(cli, ["install", self.TEST_REPO, "--skill", self.SKILL_B, "-y"])
+        runner.invoke(cli, ["sync", "--tools", "windsurf", "--yes"])
+
+        r = runner.invoke(cli, ["skill", "remove", self.SKILL_A, "--yes"])
+        assert r.exit_code == 0, r.output
+
+        content = (ws_dir / "global_rules.md").read_text()
+        assert self.SKILL_A not in content
+        assert self.SKILL_B in content
+
+    def test_remove_keeps_windsurf_block_with_remaining(self, runner, cli, tmp_path, monkeypatch):
+        """APC Skills block stays intact; only the removed skill is omitted."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        ws_dir = tmp_path / ".codeium" / "windsurf" / "memories"
+        ws_dir.mkdir(parents=True, exist_ok=True)
+
+        runner.invoke(cli, ["install", self.TEST_REPO, "--skill", self.SKILL_A, "-y"])
+        runner.invoke(cli, ["install", self.TEST_REPO, "--skill", self.SKILL_B, "-y"])
+        runner.invoke(cli, ["sync", "--tools", "windsurf", "--yes"])
+        runner.invoke(cli, ["skill", "remove", self.SKILL_A, "--yes"])
+
+        content = (ws_dir / "global_rules.md").read_text()
+        assert "<!-- apc-skills-start -->" in content
+        assert "<!-- apc-skills-end -->" in content
+
+    def test_remove_last_skill_leaves_empty_block(self, runner, cli, tmp_path, monkeypatch):
+        """Removing the last skill leaves a valid (empty) APC Skills block."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        ws_dir = tmp_path / ".codeium" / "windsurf" / "memories"
+        ws_dir.mkdir(parents=True, exist_ok=True)
+
+        runner.invoke(cli, ["install", self.TEST_REPO, "--skill", self.SKILL_A, "-y"])
+        runner.invoke(cli, ["sync", "--tools", "windsurf", "--yes"])
+        runner.invoke(cli, ["skill", "remove", self.SKILL_A, "--yes"])
+
+        content = (ws_dir / "global_rules.md").read_text()
+        assert "<!-- apc-skills-start -->" in content
+        assert self.SKILL_A not in content
+
+    # -- Copilot --------------------------------------------------------
+
+    def test_remove_deletes_copilot_symlink(self, runner, cli, tmp_path, monkeypatch):
+        """After skill remove, the .instructions.md symlink is gone."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        (tmp_path / ".copilot").mkdir(parents=True, exist_ok=True)
+
+        runner.invoke(cli, ["install", self.TEST_REPO, "--skill", self.SKILL_A, "-y"])
+        runner.invoke(cli, ["sync", "--tools", "github-copilot", "--yes"])
+
+        r = runner.invoke(cli, ["skill", "remove", self.SKILL_A, "--yes"])
+        assert r.exit_code == 0, r.output
+
+        instr_dir = tmp_path / ".github" / "instructions"
+        assert not (instr_dir / f"{self.SKILL_A}.instructions.md").exists()
+
+    def test_remove_keeps_other_copilot_symlinks(self, runner, cli, tmp_path, monkeypatch):
+        """Only the removed skill's symlink is deleted; others remain."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        (tmp_path / ".copilot").mkdir(parents=True, exist_ok=True)
+
+        runner.invoke(cli, ["install", self.TEST_REPO, "--skill", self.SKILL_A, "-y"])
+        runner.invoke(cli, ["install", self.TEST_REPO, "--skill", self.SKILL_B, "-y"])
+        runner.invoke(cli, ["sync", "--tools", "github-copilot", "--yes"])
+        runner.invoke(cli, ["skill", "remove", self.SKILL_A, "--yes"])
+
+        instr_dir = tmp_path / ".github" / "instructions"
+        assert not (instr_dir / f"{self.SKILL_A}.instructions.md").exists()
+        assert (instr_dir / f"{self.SKILL_B}.instructions.md").is_symlink()
+
+    def test_remove_skill_also_deletes_from_apc_skills(self, runner, cli, tmp_path, monkeypatch):
+        """Skill dir in ~/.apc/skills/ is deleted regardless of sync state."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        runner.invoke(cli, ["install", self.TEST_REPO, "--skill", self.SKILL_A, "-y"])
+
+        skill_md = tmp_path / ".apc" / "skills" / self.SKILL_A / "SKILL.md"
+        assert skill_md.exists()
+
+        runner.invoke(cli, ["skill", "remove", self.SKILL_A, "--yes"])
+        assert not skill_md.exists()
+
+    def test_remove_unknown_skill_warns_gracefully(self, runner, cli, tmp_path, monkeypatch):
+        """Removing a skill that doesn't exist prints a warning and exits cleanly."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        r = runner.invoke(cli, ["skill", "remove", "nonexistent-skill-xyz", "--yes"])
+        assert r.exit_code == 0
+        assert "not found" in r.output.lower() or "nothing" in r.output.lower()
+
+    def test_remove_no_sync_does_not_crash(self, runner, cli, tmp_path, monkeypatch):
+        """Removing a skill when no tools are synced completes without error."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        runner.invoke(cli, ["install", self.TEST_REPO, "--skill", self.SKILL_A, "-y"])
+        r = runner.invoke(cli, ["skill", "remove", self.SKILL_A, "--yes"])
+        assert r.exit_code == 0

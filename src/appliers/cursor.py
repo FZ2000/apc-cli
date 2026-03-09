@@ -76,6 +76,8 @@ def _cursor_mcp_json() -> Path:
 
 class CursorApplier(BaseApplier):
     TOOL_NAME = "cursor"
+    # ~/.cursor/rules/ → ~/.apc/skills/ symlink (dir-level sync, same as all tools).
+    # Skills appear as <name>/SKILL.md subdirs; .mdc per-file format superseded.
     MEMORY_SCHEMA = CURSOR_MEMORY_SCHEMA
 
     @property  # type: ignore[override]

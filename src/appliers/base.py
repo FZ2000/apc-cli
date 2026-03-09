@@ -64,6 +64,7 @@ class BaseApplier(ABC):
     # Subclasses that support skills should set this to their skill directory
     # and the target name used in frontmatter filtering.
     SKILL_DIR: Optional[Path] = None
+    SYNC_METHOD: str = "dir-symlink"  # override in injection/per-file tools
     TOOL_NAME: str = ""
 
     # Subclasses that support LLM-based memory sync should override this
@@ -139,6 +140,75 @@ class BaseApplier(ABC):
             count += 1
 
         return count
+
+    def sync_skills_dir(self) -> bool:
+        """Establish a dir-level symlink: SKILL_DIR → ~/.apc/skills/.
+
+        Only applies when SKILL_DIR is set on the applier.
+        After this runs once, any future `apc install` is immediately live in
+        this tool without re-running sync.
+
+        Returns True if the symlink was established, False if not applicable.
+        """
+        from skills import get_skills_dir
+
+        if self.SKILL_DIR is None:
+            return False
+
+        skills_source = get_skills_dir()
+        skill_dir = self.SKILL_DIR
+
+        # Already correctly symlinked — nothing to do
+        already_linked = skill_dir.is_symlink() and (
+            Path(os.readlink(skill_dir)).resolve() == skills_source.resolve()
+        )
+        if already_linked:
+            return True
+
+        # Remove whatever is there now
+        if skill_dir.is_symlink():
+            skill_dir.unlink()
+        elif skill_dir.exists():
+            shutil.rmtree(skill_dir)
+
+        # Ensure parent exists, then symlink
+        skill_dir.parent.mkdir(parents=True, exist_ok=True)
+        os.symlink(skills_source, skill_dir)
+        return True
+
+    def apply_installed_skill(self, name: str) -> bool:
+        """Propagate a newly installed skill to this tool (called by apc install).
+
+        Dir-symlink tools: no-op — the symlink already makes the skill live.
+        Override in tools that need per-skill injection (Windsurf, Copilot).
+        Returns True if an action was taken, False if no-op.
+        """
+        return False  # dir-symlink tools need no action
+
+    def remove_installed_skill(self, name: str) -> bool:
+        """Clean up after a skill is uninstalled from ~/.apc/skills/.
+
+        Dir-symlink tools: no-op — the skill dir vanishes automatically.
+        Override in tools that maintain per-skill state (Windsurf, Copilot).
+        Returns True if an action was taken, False if no-op.
+        """
+        return False  # dir-symlink tools need no cleanup
+
+    def unsync_skills(self) -> bool:
+        """Undo the skill sync for this tool.
+
+        Dir-symlink tools: remove the symlink, recreate an empty dir.
+        Override in tools that use injection or per-file symlinks.
+        Returns True if anything was undone.
+        """
+        skill_dir = self.SKILL_DIR
+        if skill_dir is None:
+            return False
+        if skill_dir.is_symlink():
+            skill_dir.unlink()
+            skill_dir.mkdir(parents=True, exist_ok=True)
+            return True
+        return False
 
     @abstractmethod
     def apply_mcp_servers(

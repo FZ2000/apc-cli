@@ -68,54 +68,43 @@ def resolve_target_tools(tools_flag: Optional[str], apply_all: bool) -> List[str
 
 
 def sync_skills(tool_list: List[str]) -> Tuple[int, int]:
-    """Apply all skills to tools. Returns (copy_count, link_count).
+    """Establish skill links for all tools. Returns (dir_linked_count, skill_linked_count).
 
-    Two skill sources:
-    1. Collected skills (from cache, have body inline) -> apply_skills() copy mode
-    2. Installed skills (from ~/.apc/skills/, have SKILL.md files) -> link_skills() symlink mode
+    ~/.apc/skills/ is the single source of truth for all skills (installed and collected).
+    Three strategies depending on the tool:
+
+    - Dir-symlink (OpenClaw, Claude Code, Gemini, Cursor): replace the tool's skills
+      dir with a single symlink → ~/.apc/skills/. Future installs are live immediately.
+    - Injection (Windsurf): maintain an APC Skills block in global_rules.md.
+    - Per-file symlinks (Copilot): create <name>.instructions.md → SKILL.md symlinks.
     """
-    bundle = load_local_bundle()
-    collected_skills = bundle["skills"]
     skills_dir = get_skills_dir()
-    installed_skills = _discover_installed_skills()
 
-    total_copy = 0
-    total_link = 0
-
-    # Build combined name list for pruning
-    all_skill_names = list(
-        {s.get("name", "unnamed") for s in collected_skills}
-        | {s.get("name", "unnamed") for s in installed_skills}
-    )
+    total_dir = 0
 
     for tool_name in tool_list:
         try:
             applier = get_applier(tool_name)
             manifest = applier.get_manifest()
 
-            # Per-tool counts (reset each iteration)
-            tool_copy = 0
-            tool_link = 0
+            if applier.sync_skills_dir():
+                if applier.SKILL_DIR is not None:
+                    # Dir-symlink tools: record the symlink target
+                    manifest.record_dir_sync(str(applier.SKILL_DIR), str(skills_dir))
+                    success(f"{tool_name}: skills dir symlinked → ~/.apc/skills/")
+                else:
+                    # Tool-specific sync (injection or per-file symlinks)
+                    manifest.record_tool_sync(applier.SYNC_METHOD)
+                    success(f"{tool_name}: skills synced ({applier.SYNC_METHOD})")
+                manifest.save()
+                total_dir += 1
+            else:
+                success(f"{tool_name}: no skills dir configured — skipping")
 
-            # Copy collected skills
-            if collected_skills:
-                tool_copy = applier.apply_skills(collected_skills, manifest)
-                total_copy += tool_copy
-
-            # Link installed skills
-            if installed_skills:
-                tool_link = applier.link_skills(installed_skills, skills_dir, manifest)
-                total_link += tool_link
-
-            # Prune orphaned skills (keep MCP names empty — not our concern)
-            applier.prune(all_skill_names, [], manifest)
-            manifest.save()
-
-            success(f"{tool_name}: {tool_copy} copied, {tool_link} linked")
         except Exception as e:
             error(f"Failed to sync skills to {tool_name}: {e}")
 
-    return total_copy, total_link
+    return total_dir, 0
 
 
 def sync_mcp(tool_list: List[str], override: bool = False) -> int:
@@ -190,18 +179,10 @@ def sync_all(tool_list: List[str], no_memory: bool = False, override_mcp: bool =
     Returns True if at least one tool was synced successfully, False otherwise.
     """
     bundle = load_local_bundle()
-    collected_skills = bundle["skills"]
     mcp_servers = bundle["mcp_servers"]
     memory_entries = bundle["memory"] if not no_memory else []
 
     skills_dir = get_skills_dir()
-    installed_skills = _discover_installed_skills()
-
-    # Build combined name lists for pruning
-    all_skill_names = list(
-        {s.get("name", "unnamed") for s in collected_skills}
-        | {s.get("name", "unnamed") for s in installed_skills}
-    )
     current_mcp_names = [s.get("name", "unnamed") for s in mcp_servers]
 
     total_skills = 0
@@ -214,11 +195,10 @@ def sync_all(tool_list: List[str], no_memory: bool = False, override_mcp: bool =
             applier = get_applier(tool_name)
             manifest = applier.get_manifest()
 
-            # Copy collected skills
-            s = applier.apply_skills(collected_skills, manifest)
-
-            # Link installed skills
-            lk = applier.link_skills(installed_skills, skills_dir, manifest)
+            # Establish dir-level symlink: SKILL_DIR → ~/.apc/skills/
+            if applier.sync_skills_dir():
+                manifest.record_dir_sync(str(applier.SKILL_DIR), str(skills_dir))
+            s, lk = (1, 0) if applier.SKILL_DIR is not None else (0, 0)
 
             # MCP servers
             secrets = _resolve_all_mcp_secrets(mcp_servers)
@@ -229,8 +209,8 @@ def sync_all(tool_list: List[str], no_memory: bool = False, override_mcp: bool =
             if memory_entries:
                 mem = applier.apply_memory_via_llm(memory_entries, manifest)
 
-            # Prune orphans
-            applier.prune(all_skill_names, current_mcp_names, manifest)
+            # Prune MCP orphans (skills are managed via dir symlink — no pruning needed)
+            applier.prune([], current_mcp_names, manifest)
             manifest.save()
 
             total_skills += s + lk
