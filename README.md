@@ -161,7 +161,10 @@ apc --version
 | `apc memory list` | List all memory entries |
 | `apc memory show` | View full memory details with pagination |
 | `apc memory add "<text>"` | Add a memory entry manually |
+| `apc memory remove [id]` | Remove a memory entry from the cache |
 | `apc memory sync` | Sync memory to target tools via LLM |
+
+> **Note:** `apc memory add`, `apc memory remove`, and `apc collect` only affect the local cache (`~/.apc/cache/memory.json`). They **do not** automatically push changes to synced tools. Run `apc sync` or `apc memory sync` after these commands to propagate changes to tools.
 
 ### MCP Servers
 
@@ -218,6 +221,23 @@ apc --version
 1. **Extract** — `apc collect` scans installed tools, pulls out skills, MCP server configs, and memory files
 2. **Cache** — everything is stored in `~/.apc/` as JSON; secrets are redacted and stored in the OS keychain
 3. **Sync** — `apc sync` writes configs to target tools in their native formats, using manifests to track changes
+
+### Skills vs Memory: how sync reaches tools
+
+Skills and memory reach tools differently after sync is established:
+
+**Skills** — synced via directory symlink (for Claude Code, Cursor, Gemini CLI, OpenClaw) or per-file symlinks / injection (for Copilot, Windsurf). Once the symlink is in place, `apc install` immediately propagates to all synced tools — no extra sync step needed. The symlink means the tool always reads directly from `~/.apc/skills/`.
+
+**Memory** — always a two-step process, regardless of sync state:
+
+| Command | What it touches |
+|---------|----------------|
+| `apc memory add` | Local cache only (`~/.apc/cache/memory.json`) |
+| `apc memory remove` | Local cache only — does **not** un-write from tool files |
+| `apc collect` | Local cache only — pulls from tools, never pushes |
+| `apc sync` / `apc memory sync` | Reads cache, calls an LLM to reformat entries, writes to each tool's native memory file |
+
+Memory is never live-linked. Every `apc memory add` or `apc collect` must be followed by `apc sync` (or `apc memory sync`) to push updates to tools. Removing a cache entry also requires a re-sync — the previous content already written to a tool file stays there until the next sync overwrites it.
 
 ### Directory Structure
 
