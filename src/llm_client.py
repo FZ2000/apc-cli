@@ -7,6 +7,12 @@ Supports three calling modes:
 - claude-cli: Shell out to `claude -p` for OAuth/setup-token users
 
 Uses httpx (already a project dependency).
+
+Security note: base_url is validated before use to prevent config-injection
+redirects (analogous to CVE-2026-21852 in Claude Code). apc-cli deliberately
+does NOT read ANTHROPIC_BASE_URL from the environment — base URLs come from
+the hardcoded PROVIDERS registry or the user's ~/.apc/models.json, validated
+here before any HTTP call.
 """
 
 import json
@@ -14,6 +20,7 @@ import os
 import shutil
 import subprocess
 from typing import Optional
+from urllib.parse import urlparse
 
 import httpx
 
@@ -26,6 +33,59 @@ from llm_config import (
 
 # Timeout: 30s connect, 120s read (LLM responses can be slow)
 _TIMEOUT = httpx.Timeout(connect=30.0, read=120.0, write=30.0, pool=30.0)
+
+# Known cloud provider hostnames. Custom/local providers are exempt from
+# HTTPS enforcement (e.g. http://127.0.0.1:11434 for Ollama is fine).
+_CLOUD_HOSTS = {
+    "api.anthropic.com",
+    "api.openai.com",
+    "generativelanguage.googleapis.com",
+    "dashscope.aliyuncs.com",
+    "open.bigmodel.cn",
+    "api.minimax.chat",
+    "api.moonshot.cn",
+}
+
+
+def _validate_base_url(base_url: str) -> None:
+    """Validate base_url before use to prevent config-injection redirects.
+
+    Rules:
+    - Must be a non-empty string
+    - Must have http or https scheme
+    - No user-info component (no credentials embedded in URL)
+    - Known cloud provider endpoints must use HTTPS (not HTTP)
+    - Rejects obviously malformed values (path traversal, whitespace, etc.)
+
+    Raises LLMError for invalid values.
+    """
+    if not base_url or not isinstance(base_url, str):
+        raise LLMError("LLM base_url is empty or invalid")
+
+    stripped = base_url.strip()
+    if stripped != base_url:
+        raise LLMError(f"LLM base_url contains leading/trailing whitespace: {base_url!r}")
+
+    try:
+        parsed = urlparse(base_url)
+    except Exception as exc:
+        raise LLMError(f"LLM base_url could not be parsed: {base_url!r}") from exc
+
+    if parsed.scheme not in ("http", "https"):
+        raise LLMError(
+            f"LLM base_url has unsupported scheme {parsed.scheme!r} (must be http or https): "
+            f"{base_url!r}"
+        )
+
+    if parsed.username or parsed.password:
+        raise LLMError("LLM base_url must not contain embedded credentials (user:pass@host)")
+
+    # Cloud providers must use HTTPS to prevent plaintext key transmission
+    hostname = (parsed.hostname or "").lower()
+    if hostname in _CLOUD_HOSTS and parsed.scheme != "https":
+        raise LLMError(
+            f"Cloud provider endpoint {hostname!r} must use HTTPS, not HTTP: {base_url!r}"
+        )
 
 
 class LLMError(Exception):
@@ -90,6 +150,8 @@ def call_llm(
             f"Run 'apc configure' or set the environment variable."
         )
 
+    _validate_base_url(base_url)
+
     if api_dialect == "anthropic-messages":
         return _call_anthropic(base_url, api_key, model_name, prompt, system)
     else:
@@ -153,12 +215,13 @@ def _call_claude_cli(
             pass
 
     if result.returncode != 0:
-        stderr = result.stderr.strip()[:500] if result.stderr else "(no stderr)"
+        # Limit stderr to avoid leaking environment or token values from the process
+        stderr = result.stderr.strip()[:300].replace("\n", " ") if result.stderr else "(no stderr)"
         raise LLMError(f"Claude CLI exited with code {result.returncode}: {stderr}")
 
     output = result.stdout.strip()
     if not output:
-        stderr = result.stderr.strip()[:500] if result.stderr else "(no stderr)"
+        stderr = result.stderr.strip()[:300].replace("\n", " ") if result.stderr else "(no stderr)"
         raise LLMError(f"Claude CLI returned empty output. stderr: {stderr}")
 
     return output
@@ -193,7 +256,9 @@ def _call_anthropic(
         raise LLMError(f"HTTP error calling Anthropic API: {e}") from e
 
     if resp.status_code != 200:
-        raise LLMError(f"Anthropic API returned {resp.status_code}: {resp.text[:500]}")
+        # Truncate and strip — never echo request headers (which contain the API key)
+        safe_body = resp.text[:300].replace("\n", " ")
+        raise LLMError(f"Anthropic API returned {resp.status_code}: {safe_body}")
 
     try:
         data = resp.json()
@@ -202,7 +267,7 @@ def _call_anthropic(
         text_parts = [b["text"] for b in content_blocks if b.get("type") == "text"]
         return "".join(text_parts)
     except (json.JSONDecodeError, KeyError, TypeError) as e:
-        raise LLMError(f"Failed to parse Anthropic response: {e}") from e
+        raise LLMError(f"Failed to parse Anthropic response: {type(e).__name__}") from e
 
 
 def _call_openai_compat(
@@ -236,10 +301,11 @@ def _call_openai_compat(
         raise LLMError(f"HTTP error calling OpenAI-compatible API: {e}") from e
 
     if resp.status_code != 200:
-        raise LLMError(f"OpenAI-compatible API returned {resp.status_code}: {resp.text[:500]}")
+        safe_body = resp.text[:300].replace("\n", " ")
+        raise LLMError(f"OpenAI-compatible API returned {resp.status_code}: {safe_body}")
 
     try:
         data = resp.json()
         return data["choices"][0]["message"]["content"]
     except (json.JSONDecodeError, KeyError, IndexError, TypeError) as e:
-        raise LLMError(f"Failed to parse OpenAI-compatible response: {e}") from e
+        raise LLMError(f"Failed to parse OpenAI-compatible response: {type(e).__name__}") from e
