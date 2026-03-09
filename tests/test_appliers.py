@@ -143,8 +143,8 @@ class TestClaudeApplier(unittest.TestCase):
         content = self.claude_md.read_text()
         self.assertIn("Prefers TypeScript", content)
 
-    def test_apply_memory_via_llm_returns_zero_on_failure(self):
-        """When LLM fails, returns 0 (no fallback to legacy)."""
+    def test_apply_memory_via_llm_returns_negative_on_failure(self):
+        """When LLM fails, returns -1 to signal failure (not 0 which looks like success)."""
         collected = [
             {"id": "abc", "source_tool": "openclaw", "content": "test"},
         ]
@@ -159,7 +159,7 @@ class TestClaudeApplier(unittest.TestCase):
             applier = ClaudeApplier()
             count = applier.apply_memory_via_llm(collected, manifest)
 
-        self.assertEqual(count, 0)
+        self.assertEqual(count, -1)  # -1 signals LLM failure, not zero-files-written
 
     def test_apply_memory_via_llm_handles_markdown_fencing(self):
         """LLM sometimes wraps response in markdown code blocks."""

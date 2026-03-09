@@ -158,7 +158,10 @@ def sync_mcp(tool_list: List[str], override: bool = False) -> int:
 
 
 def sync_memory(tool_list: List[str]) -> int:
-    """Apply memory via LLM transformation to tools. Returns count."""
+    """Apply memory via LLM transformation to tools. Returns count.
+
+    Returns -1 if every tool's LLM call failed (no ✓ should be shown).
+    """
     bundle = load_local_bundle()
     memory_entries = bundle["memory"]
 
@@ -167,6 +170,7 @@ def sync_memory(tool_list: List[str]) -> int:
         return 0
 
     total = 0
+    any_llm_failure = False
 
     for tool_name in tool_list:
         try:
@@ -174,13 +178,20 @@ def sync_memory(tool_list: List[str]) -> int:
             manifest = applier.get_manifest()
 
             mem = applier.apply_memory_via_llm(memory_entries, manifest)
-            manifest.save()
-
-            total += mem
-            success(f"{tool_name}: {mem} memory files")
+            if mem < 0:
+                # LLM auth/call failed — do not show ✓, do not mark as synced (#31)
+                any_llm_failure = True
+                manifest.save_failure(f"LLM call failed for {tool_name}")
+                error(f"{tool_name}: memory sync failed (LLM unavailable — run 'apc configure')")
+            else:
+                manifest.save()
+                total += mem
+                success(f"{tool_name}: {mem} memory files")
         except Exception as e:
             error(f"Failed to sync memory to {tool_name}: {e}")
 
+    if any_llm_failure and total == 0:
+        return -1
     return total
 
 
@@ -210,6 +221,7 @@ def sync_all(tool_list: List[str], no_memory: bool = False, override_mcp: bool =
     failed_tools = []
 
     for tool_name in tool_list:
+        manifest = None
         try:
             applier = get_applier(tool_name)
             manifest = applier.get_manifest()
@@ -224,23 +236,40 @@ def sync_all(tool_list: List[str], no_memory: bool = False, override_mcp: bool =
             secrets = _resolve_all_mcp_secrets(mcp_servers)
             m = applier.apply_mcp_servers(mcp_servers, secrets, manifest, override=override_mcp)
 
-            # Memory
+            # Memory (-1 means LLM call failed, not a hard error for overall sync)
             mem = 0
+            mem_failed = False
             if memory_entries:
                 mem = applier.apply_memory_via_llm(memory_entries, manifest)
+                if mem < 0:
+                    mem_failed = True
+                    mem = 0
 
             # Prune orphans
             applier.prune(all_skill_names, current_mcp_names, manifest)
-            manifest.save()
+
+            if mem_failed:
+                # Save manifest but mark memory as failed (#31, #34)
+                manifest.save_failure(f"LLM memory sync failed for {tool_name}")
+                mem_label = "memory sync failed"
+            else:
+                manifest.save()
+                mem_label = f"{mem} memory files"
 
             total_skills += s + lk
             total_mcp += m
             total_memory += mem
 
-            success(f"{tool_name}: {s + lk} skills, {m} MCP servers, {mem} memory files")
+            success(f"{tool_name}: {s + lk} skills, {m} MCP servers, {mem_label}")
         except Exception as e:
             error(f"Failed to apply to {tool_name}: {e}")
             failed_tools.append(tool_name)
+            # Persist failure so `apc status` reflects the error (#34)
+            if manifest is not None:
+                try:
+                    manifest.save_failure(str(e))
+                except Exception:
+                    pass
 
     any_success = len(failed_tools) < len(tool_list)
     if any_success:

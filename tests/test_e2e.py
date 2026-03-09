@@ -71,7 +71,7 @@ class TestMemoryViaLLM(unittest.TestCase):
             applier = ClaudeApplier()
             count = applier.apply_memory_via_llm(collected, manifest)
 
-        self.assertEqual(count, 0)
+        self.assertEqual(count, -1)  # -1 signals LLM failure
 
 
 if __name__ == "__main__":
