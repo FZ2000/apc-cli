@@ -27,9 +27,20 @@ def mcp_list_cmd():
 @click.option("--tools", default=None, help="Comma-separated list of target tools")
 @click.option("--all", "apply_all", is_flag=True, help="Apply to all detected tools")
 @click.option("--override", is_flag=True, help="Replace existing MCP servers instead of merging")
+@click.option(
+    "--all-sources",
+    "all_sources",
+    is_flag=True,
+    help="Sync ALL cached servers to every tool, ignoring source_tool origin.",
+)
 @click.option("--yes", "-y", is_flag=True, help="Skip confirmation prompt")
-def mcp_sync(tools, apply_all, override, yes):
-    """Sync MCP servers to target tools."""
+def mcp_sync(tools, apply_all, override, all_sources, yes):
+    """Sync MCP servers to target tools.
+
+    By default each server is only applied to the tool it was originally
+    collected from (source_tool). Use --all-sources to broadcast every
+    cached server to every target tool regardless of origin.
+    """
     header("MCP Sync")
 
     tool_list = resolve_target_tools(tools, apply_all)
@@ -45,7 +56,7 @@ def mcp_sync(tools, apply_all, override, yes):
             click.echo("Cancelled.")
             return
 
-    sync_mcp(tool_list, override=override)
+    sync_mcp(tool_list, override=override, all_sources=all_sources)
 
 
 @mcp.command("remove")
