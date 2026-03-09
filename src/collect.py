@@ -64,11 +64,17 @@ def _resolve_memory_conflicts(
     help="Comma-separated list of tools to collect from (e.g., claude,cursor)",
 )
 @click.option("--no-memory", is_flag=True, help="Skip collecting memory entries")
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Show what would be collected without writing to cache. (#25)",
+)
 @click.option("--yes", "-y", is_flag=True, help="Skip confirmation prompt")
-def collect(tools, no_memory, yes):
+def collect(tools, no_memory, dry_run, yes):
     """Extract from installed AI tools and save to local cache.
 
     No login or network required.
+    Use --dry-run to preview what would be collected without writing.
     """
     # --- Phase 1: Scan ---
     header("Scanning")
@@ -162,6 +168,35 @@ def collect(tools, no_memory, yes):
     if all_secrets:
         store_secrets_batch("local", all_secrets)
         success(f"Stored {len(all_secrets)} secret(s) in OS keychain")
+
+    # --- Dry-run: preview without writing (#25) ---
+    if dry_run:
+        from cache import get_cache_dir
+
+        cache_dir = get_cache_dir()
+        info("\n[dry-run] Would write to cache:")
+        info(f"  {cache_dir / 'skills.json'}   ({len(new_skills)} skills)")
+        info(f"  {cache_dir / 'mcp.json'}       ({len(new_mcp_servers)} MCP servers)")
+        info(f"  {cache_dir / 'memory.json'}    ({len(selected_memory)} memory entries)")
+
+        if new_skills:
+            info("\n  Skills:")
+            for s in new_skills:
+                info(f"    • {s.get('name', '?')}  ({s.get('source_tool', '')})")
+
+        if new_mcp_servers:
+            info("\n  MCP Servers:")
+            for sv in new_mcp_servers:
+                info(f"    • {sv.get('name', '?')}  ({sv.get('source_tool', '')})")
+
+        if selected_memory:
+            info("\n  Memory files:")
+            for e in selected_memory:
+                label = e.get("label") or e.get("source_file") or e.get("content", "")[:40]
+                info(f"    • {e.get('source_tool', '?')}/{label}")
+
+        info("\n[dry-run] No files written.")
+        return
 
     # Merge into existing cache (upsert, never delete)
     merged_skills = merge_skills(load_skills(), new_skills)
