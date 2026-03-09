@@ -204,11 +204,14 @@ class TestRedirectPrevention(unittest.TestCase):
 
             fetch_skill_from_repo("owner/repo", "my-skill", "main")
 
-        self.assertEqual(len(calls), 1)
-        self.assertFalse(
-            calls[0]["follow_redirects"],
-            "follow_redirects must be False to prevent SSRF",
-        )
+        # 2 calls: (1) raw SKILL.md content, (2) GitHub Commits API for SHA (#29)
+        # All calls must have follow_redirects=False
+        self.assertGreaterEqual(len(calls), 1)
+        for call in calls:
+            self.assertFalse(
+                call["follow_redirects"],
+                "follow_redirects must be False to prevent SSRF",
+            )
 
 
 if __name__ == "__main__":
