@@ -121,7 +121,40 @@ def sync(tools, apply_all, no_memory, override_mcp, dry_run, yes):
         info(f"Skills: {len(collected_skills)} collected + {installed_count} installed")
 
     if dry_run:
-        info("[dry-run] No files written.")
+        # Show the file paths that would be written for each target tool (#24)
+        from appliers import get_applier
+
+        info("\n[dry-run] Files that would be written:")
+        for tool_name in tool_list:
+            try:
+                applier = get_applier(tool_name)
+                info(f"\n  [{tool_name}]")
+                # Skills
+                if collected_skills or installed_count:
+                    if hasattr(applier, "SKILL_DIR") and applier.SKILL_DIR:
+                        info(f"    Skills dir: {applier.SKILL_DIR}")
+                # MCP config
+                for attr in ("_mcp_config", "_mcp_config_path"):
+                    fn = getattr(type(applier), attr, None) or getattr(applier, attr, None)
+                    if callable(fn):
+                        try:
+                            info(f"    MCP config: {fn()}")
+                        except Exception:
+                            pass
+                # Memory target
+                mem_target = getattr(applier, "MEMORY_TARGET_FILE", None)
+                if callable(mem_target):
+                    mem_target = mem_target  # property — access below
+                try:
+                    mf = applier.MEMORY_TARGET_FILE
+                    if mf:
+                        info(f"    Memory:     {mf}")
+                except Exception:
+                    pass
+            except Exception as e:
+                info(f"  [{tool_name}] (could not inspect: {e})")
+
+        info("\n[dry-run] No files written.")
         return
 
     # Confirm
