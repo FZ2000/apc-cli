@@ -36,6 +36,112 @@ from ui import (
 )
 
 
+def _resolve_mcp_conflicts(
+    all_servers: List[Dict],
+    yes: bool,
+) -> List[Dict]:
+    """Detect MCP server name collisions across tools and let the user resolve them.
+
+    A collision occurs when two or more tools provide an MCP server with the
+    same name (e.g. both claude-code and cursor have a server called "my-mcp").
+
+    For each collision the user may:
+      - overwrite  → keep only one entry; the last-collected one is the default
+      - rename     → keep both, but suffix the non-default one with its source
+                     tool name (e.g. "my-mcp-cursor")
+
+    When --yes / non-interactive: last-collected wins (overwrite silently).
+    """
+    if not all_servers:
+        return []
+
+    # Group by server name to detect collisions
+    from collections import defaultdict
+
+    by_name: Dict[str, List[Dict]] = defaultdict(list)
+    for server in all_servers:
+        by_name[server.get("name", "")].append(server)
+
+    collisions = {name: entries for name, entries in by_name.items() if len(entries) > 1}
+
+    if not collisions or yes:
+        # No conflicts, or --yes: last-collected wins (standard merge behaviour)
+        return all_servers
+
+    # Interactive resolution
+    from rich.console import Console
+    from rich.table import Table
+
+    console = Console()
+    resolved: List[Dict] = []
+    # Start with non-conflicting servers
+    for name, entries in by_name.items():
+        if len(entries) == 1:
+            resolved.append(entries[0])
+
+    for name, entries in collisions.items():
+        console.print(
+            f"\n[bold yellow]⚠ MCP server name conflict:[/bold yellow] [bold]{name!r}[/bold]"
+        )
+
+        tbl = Table(show_header=True, header_style="bold cyan", show_lines=False)
+        tbl.add_column("#", style="dim", width=3)
+        tbl.add_column("Source Tool", style="green")
+        tbl.add_column("Command")
+        tbl.add_column("Args")
+
+        for i, entry in enumerate(entries, 1):
+            cmd = entry.get("command") or ""
+            args = " ".join(str(a) for a in entry.get("args", []))
+            tbl.add_row(str(i), entry.get("source_tool", "?"), cmd, args)
+
+        console.print(tbl)
+        console.print(
+            "[dim]Options: overwrite (keep one) or rename (keep both with tool suffix)[/dim]"
+        )
+
+        # Pick which entry to keep as canonical
+        default_idx = len(entries)  # last-collected
+        raw = click.prompt(
+            f"  Keep which as {name!r}? [1-{len(entries)}]",
+            default=str(default_idx),
+        ).strip()
+        try:
+            keep_idx = int(raw) - 1
+            if not (0 <= keep_idx < len(entries)):
+                raise ValueError
+        except ValueError:
+            info(f"  Invalid choice — keeping last-collected entry for {name!r}")
+            keep_idx = len(entries) - 1
+
+        canonical = entries[keep_idx]
+        others = [e for i, e in enumerate(entries) if i != keep_idx]
+
+        resolved.append(canonical)
+
+        # Ask about the others: rename or discard
+        for other in others:
+            src = other.get("source_tool", "other")
+            new_name = f"{name}-{src}"
+            choice = (
+                click.prompt(
+                    f"  Entry from {src!r}: [r]ename to {new_name!r} or [d]iscard?",
+                    default="r",
+                )
+                .strip()
+                .lower()
+            )
+            if choice.startswith("r"):
+                renamed = dict(other)
+                renamed["name"] = new_name
+                resolved.append(renamed)
+                info(f"  ✓ Renamed to {new_name!r}")
+            else:
+                info(f"  ✓ Discarded {src!r} entry for {name!r}")
+
+    return resolved
+
+
 def _resolve_memory_conflicts(
     all_memory: List[Dict],
     yes: bool,
@@ -126,9 +232,13 @@ def collect(tools, no_memory, dry_run, yes):
     scan_results_table(tool_counts)
 
     # --- Phase 2: Conflict Resolution ---
+    all_mcp_raw: List[Dict] = []
     all_memory_raw: List[Dict] = []
     for data in tool_extractions.values():
+        all_mcp_raw.extend(data["mcp_servers"])
         all_memory_raw.extend(data["memory"])
+
+    resolved_mcp = _resolve_mcp_conflicts(all_mcp_raw, yes)
 
     if all_memory_raw and not no_memory:
         selected_memory = _resolve_memory_conflicts(all_memory_raw, yes)
@@ -145,11 +255,10 @@ def collect(tools, no_memory, dry_run, yes):
     header("Collecting")
 
     new_skills = []
-    new_mcp_servers = []
-
-    for tool_name, data in tool_extractions.items():
+    for data in tool_extractions.values():
         new_skills.extend(data["skills"])
-        new_mcp_servers.extend(data["mcp_servers"])
+
+    new_mcp_servers = resolved_mcp
 
     # Add collected_at timestamp to selected memory entries
     now = datetime.now(timezone.utc).isoformat()
