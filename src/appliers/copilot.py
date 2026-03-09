@@ -96,6 +96,10 @@ class CopilotApplier(BaseApplier):
         # calling process later changes directory (#42).
         return Path.cwd().resolve()
 
+    @property  # type: ignore[override]
+    def MEMORY_TARGET_FILE(self) -> "Path":  # noqa: N802
+        return _copilot_instructions()
+
     def apply_skills(self, skills: List[Dict], manifest: ToolManifest) -> int:
         count = 0
         instructions = _copilot_instructions()

@@ -81,6 +81,21 @@ class BaseApplier(ABC):
     # applier forgets to set the guard.
     MEMORY_ALLOWED_BASE: Optional[Path] = None
 
+    # Subclasses may set MEMORY_TARGET_FILE to a primary memory file path.
+    # When set, apply_memory_via_llm() falls back to writing a simple formatted
+    # section using memory_section.write_memory_file() when the LLM is
+    # unavailable, rather than returning -1 (#38-#43).
+    MEMORY_TARGET_FILE: Optional[Path] = None
+
+    # Category headers for the no-LLM fallback section layout.
+    MEMORY_CATEGORY_HEADERS: Dict[str, str] = {
+        "preference": "Preferences",
+        "project": "Project Context",
+        "rule": "Rules",
+        "fact": "Facts",
+        "workflow": "Workflow",
+    }
+
     def get_manifest(self) -> ToolManifest:
         """Return (or create) the manifest for this tool."""
         return ToolManifest(self.TOOL_NAME)
@@ -187,7 +202,7 @@ class BaseApplier(ABC):
                 f"LLM not available for memory sync to {self.TOOL_NAME}. "
                 "Run 'apc configure' to set up an LLM provider."
             )
-            return 0
+            return self._apply_memory_fallback(collected_memory, manifest)
 
         # Read existing files
         existing = self._read_existing_memory_files()
@@ -216,7 +231,7 @@ class BaseApplier(ABC):
                 )
             else:
                 warning(f"LLM call failed ({e}), skipping memory sync for {self.TOOL_NAME}")
-            return 0
+            return self._apply_memory_fallback(collected_memory, manifest)
 
         # Parse structured output
         try:
@@ -278,6 +293,47 @@ class BaseApplier(ABC):
             count += 1
 
         return count
+
+    def _apply_memory_fallback(self, collected_memory: List[Dict], manifest: ToolManifest) -> int:
+        """Write collected memory to MEMORY_TARGET_FILE without LLM.
+
+        Used when the LLM is unavailable. If MEMORY_TARGET_FILE is not set
+        on this applier, returns 0 (no file written, no success indicator).
+
+        The file is written using memory_section.write_memory_file() which
+        preserves any existing user content outside the APC-managed section.
+        Returns 1 if the file was written, 0 otherwise (#38-#43).
+        """
+        target = self.MEMORY_TARGET_FILE
+        if target is None:
+            return 0
+
+        # Security: resolved path must be inside MEMORY_ALLOWED_BASE
+        if self.MEMORY_ALLOWED_BASE is not None:
+            allowed_base = self.MEMORY_ALLOWED_BASE.resolve()
+            resolved = target.expanduser().resolve()
+            if not str(resolved).startswith(str(allowed_base) + "/") and resolved != allowed_base:
+                return 0
+        else:
+            resolved = target.expanduser().resolve()
+
+        try:
+            from appliers.memory_section import write_memory_file
+
+            write_memory_file(
+                resolved,
+                collected_memory,
+                self.MEMORY_CATEGORY_HEADERS,
+                title=f"AI Context — Synced by apc (no LLM, {self.TOOL_NAME})",
+            )
+            manifest.record_memory(
+                file_path=str(resolved),
+                content="",
+                entry_ids=[e.get("id") or e.get("entry_id", "") for e in collected_memory],
+            )
+            return 1
+        except Exception:
+            return 0
 
     def _read_existing_memory_files(self) -> Dict[str, str]:
         """Return {file_path: content} for this tool's memory files.
