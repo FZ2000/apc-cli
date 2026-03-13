@@ -108,7 +108,13 @@ def sync_skills(tool_list: List[str]) -> Tuple[int, int]:
 
 
 def sync_mcp(tool_list: List[str], override: bool = False) -> int:
-    """Apply MCP servers from cache to tools. Returns count."""
+    """Apply MCP servers from cache to tools. Returns count.
+
+    Only servers whose ``source_tool`` matches the target tool (or that have
+    no ``source_tool``, meaning they are shared) are synced to each tool.
+    This prevents tool-specific MCP servers from being broadcast to every
+    tool during a full sync (#44).
+    """
     mcp_servers = load_mcp_servers()
 
     if not mcp_servers:
@@ -124,18 +130,25 @@ def sync_mcp(tool_list: List[str], override: bool = False) -> int:
             "Ensure those files are excluded from version control."
         )
 
-    current_mcp_names = [s.get("name", "unnamed") for s in mcp_servers]
     total = 0
 
     for tool_name in tool_list:
         try:
+            # Only sync servers that originated from this tool or have no source
+            # (i.e. explicitly shared / user-added without a source_tool tag).
+            tool_servers = [
+                s for s in mcp_servers
+                if not s.get("source_tool") or s.get("source_tool") == tool_name
+            ]
+            current_tool_mcp_names = [s.get("name", "unnamed") for s in tool_servers]
+
             applier = get_applier(tool_name)
             manifest = applier.get_manifest()
 
-            secrets = _resolve_all_mcp_secrets(mcp_servers)
-            m = applier.apply_mcp_servers(mcp_servers, secrets, manifest, override=override)
+            secrets = _resolve_all_mcp_secrets(tool_servers)
+            m = applier.apply_mcp_servers(tool_servers, secrets, manifest, override=override)
             # Prune orphaned MCP servers (keep skill names empty — not our concern)
-            applier.prune([], current_mcp_names, manifest)
+            applier.prune([], current_tool_mcp_names, manifest)
             manifest.save()
 
             total += m
@@ -170,6 +183,14 @@ def sync_memory(tool_list: List[str]) -> int:
         except Exception as e:
             error(f"Failed to sync memory to {tool_name}: {e}")
 
+    # Warn if entries exist but none were synced — likely an LLM config issue (#43)
+    if memory_entries and total == 0:
+        warning(
+            f"\n⚠  {len(memory_entries)} memory entries in cache — 0 synced "
+            "(LLM unavailable or not configured). "
+            "Run 'apc configure' to enable memory sync."
+        )
+
     return total
 
 
@@ -192,6 +213,14 @@ def sync_all(tool_list: List[str], no_memory: bool = False, override_mcp: bool =
 
     for tool_name in tool_list:
         try:
+            # Only sync servers that originated from this tool or have no source
+            # (i.e. explicitly shared / user-added without a source_tool tag).
+            tool_servers = [
+                s for s in mcp_servers
+                if not s.get("source_tool") or s.get("source_tool") == tool_name
+            ]
+            current_tool_mcp_names = [s.get("name", "unnamed") for s in tool_servers]
+
             applier = get_applier(tool_name)
             manifest = applier.get_manifest()
 
@@ -200,9 +229,9 @@ def sync_all(tool_list: List[str], no_memory: bool = False, override_mcp: bool =
                 manifest.record_dir_sync(str(applier.SKILL_DIR), str(skills_dir))
             s, lk = (1, 0) if applier.SKILL_DIR is not None else (0, 0)
 
-            # MCP servers
-            secrets = _resolve_all_mcp_secrets(mcp_servers)
-            m = applier.apply_mcp_servers(mcp_servers, secrets, manifest, override=override_mcp)
+            # MCP servers (filtered to this tool only — #44)
+            secrets = _resolve_all_mcp_secrets(tool_servers)
+            m = applier.apply_mcp_servers(tool_servers, secrets, manifest, override=override_mcp)
 
             # Memory
             mem = 0
@@ -210,7 +239,7 @@ def sync_all(tool_list: List[str], no_memory: bool = False, override_mcp: bool =
                 mem = applier.apply_memory_via_llm(memory_entries, manifest)
 
             # Prune MCP orphans (skills are managed via dir symlink — no pruning needed)
-            applier.prune([], current_mcp_names, manifest)
+            applier.prune([], current_tool_mcp_names, manifest)
             manifest.save()
 
             total_skills += s + lk
@@ -229,5 +258,13 @@ def sync_all(tool_list: List[str], no_memory: bool = False, override_mcp: bool =
         )
     elif failed_tools:
         warning(f"\nSync failed for all tools: {', '.join(failed_tools)}")
+
+    # Warn if memory entries exist but none were synced — likely an LLM config issue (#43)
+    if memory_entries and total_memory == 0:
+        warning(
+            f"\n⚠  {len(memory_entries)} memory entries in cache — 0 synced "
+            "(LLM unavailable or not configured). "
+            "Run 'apc configure' to enable memory sync."
+        )
 
     return any_success

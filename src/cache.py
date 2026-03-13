@@ -127,11 +127,12 @@ def merge_memory(existing: List[Dict], new: List[Dict]) -> List[Dict]:
 
 
 def _key_mcp(s: Dict) -> str:
-    """Deduplicate MCP servers by name only.
+    """Deduplicate MCP servers by (source_tool, name) composite key.
 
-    The same logical MCP server can be collected from multiple tools
-    (e.g. a shared server configured in both Claude and Cursor). Keying
-    by name alone ensures we keep one canonical entry (last collected wins)
-    instead of accumulating one entry per source tool.
+    Using a composite key preserves the correct source attribution for each
+    server.  When the same server name appears in multiple tools (e.g. after
+    a full sync), each tool's entry is kept as a distinct record with its
+    original source_tool intact instead of the last-collected tool winning
+    (#47).
     """
-    return s.get("name", "")
+    return f"{s.get('source_tool', '')}:{s.get('name', '')}"
